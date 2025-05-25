@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Handlee&display=swap');
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Handlee', cursive;
+  }
+  
+  /* Dark mode transitions */
+  * {
+    @apply transition-colors duration-200;
+  }
+}
+
+/* Custom styles */
+.diagram-canvas {
+  touch-action: none;
+}
+
+/* Dark mode styles */
+.dark input,
+.dark textarea,
+.dark select {
+  @apply bg-dark-surface border-dark-border text-dark-text;
+}
+
+.dark button:not(.canvas-button) {
+  @apply bg-dark-surface hover:bg-dark-border text-dark-text border-dark-border;
+}
+
+.dark .card,
+.dark .panel,
+.dark .sidebar {
+  @apply bg-dark-surface border-dark-border text-dark-text;
+}
+
+/* Preserve canvas colors in dark mode */
+.dark .diagram-canvas {
+  /* Canvas background will be controlled separately */
+  @apply bg-white;
+}
