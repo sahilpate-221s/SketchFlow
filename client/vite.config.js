@@ -4,7 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [ tailwindcss(),react()],
+  plugins: [
+    tailwindcss(),
+    react()
+  ],
+  css: {
+    postcss: true,
+  },
   server: {
     proxy: {
       '/api': {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDiagrams } from '../hooks/useDiagrams';
 import { Plus, Search, Grid, List, Clock, Star, Users, Lock, Unlock } from 'lucide-react';
-import ThemeToggle from '../components/ThemeToggle';
+// import ThemeToggle from '../components/ThemeToggle';
 
 const Home = () => {
   const navigate = useNavigate();

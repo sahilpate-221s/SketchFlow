@@ -3,7 +3,7 @@ import Toolbar from './Toolbar';
 import Canvas from './Canvas';
 import StickyNotes from './StickyNotes';
 import MarkdownEditor from './MarkdownEditor';
-import ThemeToggle from './ThemeToggle';
+// import ThemeToggle from './ThemeToggle';
 
 const MainLayout = () => {
   const navigate = useNavigate();

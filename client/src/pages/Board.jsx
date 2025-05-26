@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { Stage, Layer } from 'react-konva';
-import { socket } from '../socket';
 import Canvas from '../components/Canvas';
 import Toolbar from '../components/Toolbar';
 import Export from '../components/Export';
 import Import from '../components/Import';
 import MarkdownEditor from '../components/MarkdownEditor';
-import ThemeToggle from '../components/ThemeToggle';
+// import ThemeToggle from '../components/ThemeToggle';
 import { 
   setTool, 
   setGridVisible, 
@@ -20,18 +19,25 @@ import {
 } from '../store/canvasSlice';
 import { useAuth } from '../context/AuthContext';
 import { useDiagram } from '../hooks/useDiagram';
-import { Share2, Users, Lock, Unlock } from 'lucide-react';
+import { Share2, Users, Lock, Unlock, LogIn } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
 
 const Board = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const stageRef = useRef(null);
+  const lastGridUpdateRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareRole, setShareRole] = useState('viewer');
+  const [shareError, setShareError] = useState('');
 
   const {
     diagram,
@@ -50,6 +56,54 @@ const Board = () => {
     collaborators,
   } = useSelector((state) => state.canvas);
 
+  const { socket, joinDiagram, leaveDiagram } = useSocket();
+
+  // Check if user has edit access
+  const hasEditAccess = useMemo(() => {
+    if (!isAuthenticated || !diagram) return false;
+    return diagram.owner.toString() === user._id.toString() || diagram.collaborators.some(c => c.user.toString() === user._id.toString() && c.role === 'editor');
+  }, [isAuthenticated, diagram, user]);
+
+  // Handle diagram updates
+  const handleDiagramUpdate = useCallback((updates) => {
+    if (!hasEditAccess) return;
+    updateDiagram(updates);
+  }, [updateDiagram, hasEditAccess]);
+
+  // Handle share dialog
+  const handleShare = async () => {
+    try {
+      setIsSharing(true);
+      setShowShareDialog(true);
+    } catch (error) {
+      console.error('Error sharing diagram:', error);
+      setError('Failed to share diagram');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleShareSubmit = async (e) => {
+    e.preventDefault();
+    setShareError('');
+
+    try {
+      setIsSaving(true);
+      await shareDiagram({
+        email: shareEmail,
+        role: shareRole,
+      });
+      setShareEmail('');
+      setShareRole('viewer');
+      setShowShareDialog(false);
+    } catch (error) {
+      console.error('Error sharing diagram:', error);
+      setShareError(error.message || 'Failed to share diagram');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Load diagram data
   useEffect(() => {
     if (diagram) {
@@ -67,36 +121,64 @@ const Board = () => {
 
   // Socket connection and collaboration
   useEffect(() => {
-    if (!user || !diagram) return;
+    if (!socket || !id) return;
 
-    // Join the diagram room
-    socket.emit('joinDiagram', { diagramId: id, user });
+    joinDiagram(id);
 
-    // Handle collaborator events
-    socket.on('collaboratorJoined', (collaborator) => {
-      dispatch(addCollaborator(collaborator));
+    socket.on('diagram-update', (updates) => {
+      dispatch(updateDiagram(updates));
     });
 
-    socket.on('collaboratorLeft', (userId) => {
+    socket.on('user-joined', (user) => {
+      dispatch(addCollaborator(user));
+    });
+
+    socket.on('user-left', (userId) => {
       dispatch(removeCollaborator(userId));
     });
 
-    socket.on('collaboratorMoved', ({ userId, position }) => {
-      dispatch(updateCollaboratorPosition({ id: userId, position }));
+    socket.on('grid-update', ({ isVisible, timestamp }) => {
+      // Only update if the incoming update is newer than our last update
+      if (!lastGridUpdateRef.current || timestamp > lastGridUpdateRef.current) {
+        dispatch(setGridVisible(isVisible));
+        lastGridUpdateRef.current = timestamp;
+      }
     });
 
-    // Cleanup
     return () => {
-      socket.emit('leaveDiagram', { diagramId: id, userId: user._id });
-      socket.off('collaboratorJoined');
-      socket.off('collaboratorLeft');
-      socket.off('collaboratorMoved');
+      leaveDiagram(id);
+      socket.off('diagram-update');
+      socket.off('user-joined');
+      socket.off('user-left');
+      socket.off('grid-update');
     };
-  }, [id, user, diagram, dispatch]);
+  }, [socket, id, dispatch, joinDiagram, leaveDiagram]);
 
-  // Save diagram changes
+  // Handle grid visibility changes
+  const handleGridToggle = useCallback(() => {
+    const newVisibility = !isGridVisible;
+    const timestamp = Date.now();
+    dispatch(setGridVisible(newVisibility));
+    lastGridUpdateRef.current = timestamp;
+    if (socket) {
+      socket.emit('grid-update', { 
+        diagramId: id, 
+        isVisible: newVisibility,
+        timestamp
+      });
+    }
+  }, [socket, id, isGridVisible, dispatch]);
+
+  // Save diagram changes (only for authenticated users with edit access)
   useEffect(() => {
-    if (!diagram || isLoading) return;
+    if (!diagram || isLoading || !isAuthenticated) return;
+
+    const isOwner = diagram.owner.toString() === user._id.toString();
+    const isEditor = diagram.collaborators.some(
+      c => c.user.toString() === user._id.toString() && c.role === 'editor'
+    );
+
+    if (!isOwner && !isEditor) return;
 
     const saveTimeout = setTimeout(async () => {
       try {
@@ -116,7 +198,7 @@ const Board = () => {
     }, 1000); // Debounce save for 1 second
 
     return () => clearTimeout(saveTimeout);
-  }, [diagram, markdownContent, isLoading, updateDiagram]);
+  }, [diagram, isLoading, isAuthenticated, user, markdownContent, updateDiagram]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -218,165 +300,110 @@ const Board = () => {
   }
 
   return (
-    <div className="relative min-h-screen bg-gray-50 dark:bg-matte-black">
-      {/* Main Toolbar */}
-      <Toolbar />
+    <div className="relative w-full h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
+      {/* Main Canvas */}
+      <Canvas stageRef={stageRef} />
 
-      {/* Theme Toggle */}
-      <div className="absolute top-4 right-4 z-50">
-        <ThemeToggle />
-      </div>
+      {/* Toolbar */}
+      <Toolbar
+        onExport={() => dispatch({ type: 'canvas/exportCanvas' })}
+        onImport={(e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              try {
+                const data = JSON.parse(event.target.result);
+                dispatch({ type: 'canvas/importCanvas', payload: data });
+              } catch (error) {
+                console.error('Error importing canvas:', error);
+              }
+            };
+            reader.readAsText(file);
+          }
+        }}
+        onShare={handleShare}
+        collaborators={collaborators}
+        onGridToggle={handleGridToggle}
+        isGridVisible={isGridVisible}
+      />
 
-      {/* Canvas */}
-      <div className="absolute inset-0 pt-16">
-        <Stage
-          ref={stageRef}
-          width={window.innerWidth}
-          height={window.innerHeight - 64}
-          scaleX={zoom}
-          scaleY={zoom}
-        >
-          <Layer>
-            <Canvas />
-          </Layer>
-        </Stage>
-      </div>
-
-      {/* Right Sidebar */}
-      <div className={`fixed right-0 top-16 bottom-0 w-80 bg-white dark:bg-dark-surface shadow-lg dark:shadow-black/30 transform transition-transform duration-300 ${
-        isMarkdownEditorVisible ? 'translate-x-0' : 'translate-x-full'
-      }`}>
-        <div className="h-full flex flex-col">
-          <div className="p-4 border-b dark:border-dark-border">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-dark-text">Markdown Notes</h2>
-          </div>
-          <div className="flex-1 overflow-auto">
-            <MarkdownEditor />
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-3">
-        {/* Export/Import */}
-        <div className="bg-white/90 dark:bg-dark-surface/90 backdrop-blur-lg rounded-xl shadow-lg border border-gray-100/50 dark:border-dark-border/50 p-2 flex items-center space-x-2">
-          <Export stageRef={stageRef} />
-          <div className="h-6 w-px bg-gray-200 dark:bg-dark-border" />
-          <Import />
-        </div>
-
-        {/* Collaboration Controls */}
-        <div className="bg-white/90 dark:bg-dark-surface/90 backdrop-blur-lg rounded-xl shadow-lg border border-gray-100/50 dark:border-dark-border/50 p-2 flex items-center space-x-2">
-          <button
-            onClick={() => setShowCollaborators(!showCollaborators)}
-            className="p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border text-gray-600 dark:text-gray-400 transition-all duration-200 hover:scale-105"
-            title="Collaborators"
-          >
-            <Users size={20} />
-            {collaborators.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-500 dark:bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {collaborators.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setIsSharing(!isSharing)}
-            className="p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border text-gray-600 dark:text-gray-400 transition-all duration-200 hover:scale-105"
-            title={diagram?.isPublic ? 'Make Private' : 'Share'}
-          >
-            {diagram?.isPublic ? <Unlock size={20} /> : <Lock size={20} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Collaborators Popover */}
-      {showCollaborators && (
-        <div className="absolute bottom-20 right-6 w-64 bg-white dark:bg-dark-surface rounded-xl shadow-lg border border-gray-100 dark:border-dark-border p-3">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-dark-text mb-2">Collaborators</h3>
-          <div className="space-y-2">
-            {collaborators.map((collaborator) => (
-              <div
-                key={collaborator.id}
-                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: collaborator.color }}
+      {/* Share Dialog */}
+      {showShareDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Share Canvas</h2>
+            <form onSubmit={handleShareSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  placeholder="Enter email address"
+                  required
                 />
-                <span className="text-sm text-gray-600 dark:text-gray-400">{collaborator.name}</span>
-                {collaborator.role === 'editor' && (
-                  <span className="text-xs text-blue-500 dark:text-blue-400">(Editor)</span>
-                )}
               </div>
-            ))}
+              <div>
+                <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Role
+                </label>
+                <select
+                  id="role"
+                  value={shareRole}
+                  onChange={(e) => setShareRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </div>
+              {shareError && (
+                <div className="text-sm text-red-600 dark:text-red-400">
+                  {shareError}
+                </div>
+              )}
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowShareDialog(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? 'Sharing...' : 'Share'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Share Dialog */}
-      {isSharing && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-dark-surface rounded-xl shadow-xl p-6 w-96">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-text mb-4">
-              Share Diagram
-            </h3>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="isPublic"
-                  checked={diagram?.isPublic}
-                  onChange={async (e) => {
-                    try {
-                      const { shareableLink } = await shareDiagram(e.target.checked);
-                      if (shareableLink) {
-                        navigator.clipboard.writeText(
-                          `${window.location.origin}${shareableLink}`
-                        );
-                      }
-                    } catch (err) {
-                      console.error('Failed to update sharing settings:', err);
-                    }
-                  }}
-                  className="rounded text-blue-500 dark:text-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400"
-                />
-                <label htmlFor="isPublic" className="text-sm text-gray-600 dark:text-gray-400">
-                  Make diagram public
-                </label>
-              </div>
-              {diagram?.isPublic && (
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Shareable link:</p>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={`${window.location.origin}/board/${id}`}
-                      className="flex-1 text-sm bg-white dark:bg-dark-surface border border-gray-200 dark:border-dark-border rounded-lg px-3 py-2 dark:text-dark-text"
-                    />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          `${window.location.origin}/board/${id}`
-                        );
-                      }}
-                      className="px-3 py-2 bg-blue-500 dark:bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              )}
+      {/* Error Toast */}
+      {error && (
+        <div className="fixed bottom-4 right-4 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-lg z-50">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
             </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setIsSharing(false)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300"
-              >
-                Close
-              </button>
+            <div className="text-sm text-red-600 dark:text-red-400">
+              {error}
             </div>
+            <button
+              onClick={() => setError(null)}
+              className="flex-shrink-0 text-red-400 hover:text-red-500 dark:hover:text-red-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}

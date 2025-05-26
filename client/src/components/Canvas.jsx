@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Stage, Layer, Rect, Circle, Line, Arrow, Text, Transformer, Group } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Line, Arrow, Text, Transformer, Group, Image, RegularPolygon } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
 import { v4 as uuidv4 } from 'uuid';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   addShape,
   updateShape,
@@ -16,20 +17,27 @@ import {
   removeCollaborator,
   undo,
   redo,
-  setSelectedShape,
-  clearSelection,
+  setTool,
   setIsDragging,
   setIsPanning,
   setLastMousePosition,
 } from '../store/canvasSlice';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
-import Toolbar from './Toolbar';
+import StickyNotes from './StickyNotes';
+import MarkdownEditor from './MarkdownEditor';
+import { Portal } from 'react-konva-utils';
+import ReactMarkdown from 'react-markdown';
 
-const Canvas = () => {
+const SMOOTHING_FACTOR = 0.3; // For freehand smoothing
+const MIN_DISTANCE = 2; // Minimum distance between points for freehand
+const POINT_THRESHOLD = 5; // Distance threshold for point reduction
+const LINE_SMOOTHING = true; // Enable line smoothing
+
+const Canvas = ({ readOnly = false }) => {
   const dispatch = useDispatch();
   const { id: diagramId } = useParams();
-  const socket = useSocket();
+  const { socket, joinDiagram, leaveDiagram, emitShapeAdd, emitShapeUpdate, emitShapeDelete, emitViewUpdate, emitCursorMove } = useSocket();
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -38,6 +46,33 @@ const Canvas = () => {
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
   const [editingTextPos, setEditingTextPos] = useState({ x: 0, y: 0 });
+  const [stickyNoteImage, setStickyNoteImage] = useState(null);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isMarkdownPanelOpen, setIsMarkdownPanelOpen] = useState(false);
+  const [editingMarkdownId, setEditingMarkdownId] = useState(null);
+  const [editingMarkdownValue, setEditingMarkdownValue] = useState('');
+  const [isPlacingStickyNote, setIsPlacingStickyNote] = useState(false);
+  const markdownPanelRef = useRef(null);
+  const [collaboratorCursors, setCollaboratorCursors] = useState({});
+  const [collaboratorPresence, setCollaboratorPresence] = useState({});
+  const cursorTimeoutRef = useRef({});
+  const lastCursorUpdateRef = useRef({});
+  const navigate = useNavigate();
+
+  // Add stage width and height state with larger initial size
+  const [stageWidth, setStageWidth] = useState(window.innerWidth * 2); // Make workspace larger
+  const [stageHeight, setStageHeight] = useState(window.innerHeight * 2);
+
+  // Update stage size on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      // Keep the workspace larger than the viewport
+      setStageWidth(Math.max(window.innerWidth * 2, stageWidth));
+      setStageHeight(Math.max(window.innerHeight * 2, stageHeight));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [stageWidth, stageHeight]);
 
   const {
     shapes,
@@ -52,71 +87,345 @@ const Canvas = () => {
     gridSize,
     zoom,
     isGridVisible,
-    selectedShape,
     isDragging,
     isPanning,
     lastMousePosition,
     collaborators,
   } = useSelector((state) => state.canvas);
 
-  // Add state for panning and selection
-  const [isSpacePressed, setIsSpacePressed] = useState(false);
-
   // Initialize socket events
   useEffect(() => {
     if (!socket || !diagramId) return;
 
-    socket.emit('join-diagram', diagramId);
+    joinDiagram(diagramId);
 
-    socket.on('shape-update', (shape) => {
-      dispatch(updateShape(shape));
+    socket.on('shapeUpdate', (data) => {
+      dispatch(updateShape(data.shape));
     });
 
-    socket.on('shape-add', (shape) => {
-      dispatch(addShape(shape));
+    socket.on('shapeAdd', (data) => {
+      dispatch(addShape(data.shape));
     });
 
-    socket.on('shape-delete', (ids) => {
-      dispatch(deleteShapes(ids));
+    socket.on('shapeDelete', (data) => {
+      dispatch(deleteShapes(data.ids));
     });
 
-    socket.on('view-update', ({ zoom: newZoom, position }) => {
+    socket.on('view-update', (data) => {
       if (stageRef.current) {
-        stageRef.current.scale({ x: newZoom, y: newZoom });
-        stageRef.current.position(position);
-        dispatch(setZoom(newZoom));
+        stageRef.current.scale({ x: data.zoom, y: data.zoom });
+        stageRef.current.position(data.position);
+        dispatch(setZoom(data.zoom));
       }
     });
 
+    socket.on('collaborator-joined', (data) => {
+      dispatch(addCollaborator(data.collaborator));
+    });
+
+    socket.on('collaborator-left', (data) => {
+      dispatch(removeCollaborator(data.userId));
+    });
+
+    socket.on('collaborator-moved', (data) => {
+      dispatch(updateCollaboratorPosition({ id: data.userId, position: data.position }));
+    });
+
+    // Handle cursor movement with throttling
+    socket.on('cursorMove', (data) => {
+      const { userId, position, user } = data;
+      const now = Date.now();
+      
+      // Throttle cursor updates (max 30fps)
+      if (lastCursorUpdateRef.current[userId] && now - lastCursorUpdateRef.current[userId] < 33) {
+        return;
+      }
+      lastCursorUpdateRef.current[userId] = now;
+
+      setCollaboratorCursors(prev => ({
+        ...prev,
+        [userId]: {
+          position,
+          user,
+          lastUpdate: now
+        }
+      }));
+
+      // Clear existing timeout
+      if (cursorTimeoutRef.current[userId]) {
+        clearTimeout(cursorTimeoutRef.current[userId]);
+      }
+
+      // Set timeout to remove cursor if no updates
+      cursorTimeoutRef.current[userId] = setTimeout(() => {
+        setCollaboratorCursors(prev => {
+          const newCursors = { ...prev };
+          delete newCursors[userId];
+          return newCursors;
+        });
+      }, 2000); // Remove cursor after 2 seconds of inactivity
+    });
+
+    // Handle user presence
+    socket.on('userPresence', (data) => {
+      const { users } = data;
+      setCollaboratorPresence(users);
+    });
+
+    // Handle user joined
+    socket.on('userJoined', (data) => {
+      const { user } = data;
+      setCollaboratorPresence(prev => ({
+        ...prev,
+        [user.id]: user
+      }));
+    });
+
+    // Handle user left
+    socket.on('userLeft', (data) => {
+      const { userId } = data;
+      setCollaboratorPresence(prev => {
+        const newPresence = { ...prev };
+        delete newPresence[userId];
+        return newPresence;
+      });
+      setCollaboratorCursors(prev => {
+        const newCursors = { ...prev };
+        delete newCursors[userId];
+        return newCursors;
+      });
+    });
+
     return () => {
-      socket.emit('leave-diagram', diagramId);
-      socket.off('shape-update');
-      socket.off('shape-add');
-      socket.off('shape-delete');
+      leaveDiagram(diagramId);
+      socket.off('shapeUpdate');
+      socket.off('shapeAdd');
+      socket.off('shapeDelete');
       socket.off('view-update');
+      socket.off('collaborator-joined');
+      socket.off('collaborator-left');
+      socket.off('collaborator-moved');
+      // Clear all timeouts
+      Object.values(cursorTimeoutRef.current).forEach(clearTimeout);
+      socket.off('cursorMove');
+      socket.off('userPresence');
+      socket.off('userJoined');
+      socket.off('userLeft');
     };
-  }, [socket, diagramId, dispatch]);
+  }, [socket, diagramId, dispatch, joinDiagram, leaveDiagram]);
 
-  // Update transformer when selection changes
+  // Load sticky note background image
   useEffect(() => {
-    if (transformerRef.current) {
-      const nodes = selectedIds.map(id => {
-        const shape = shapes.find(s => s.id === id);
-        return shape && stageRef.current.findOne(`#${id}`);
-      }).filter(Boolean);
+    const img = new window.Image();
+    img.src = '/sticky-note-bg.svg';
+    img.onload = () => setStickyNoteImage(img);
+  }, []);
 
-      transformerRef.current.nodes(nodes);
-      transformerRef.current.getLayer().batchDraw();
+  // Update handleMouseMove to make freehand drawing smoother
+  const handleMouseMove = useCallback((e) => {
+    if (!socket || !diagramId) return;
+
+    const stage = e.target.getStage();
+    const point = stage.getPointerPosition();
+    
+    // Throttle cursor updates
+    const now = Date.now();
+    if (lastCursorUpdateRef.current['self'] && now - lastCursorUpdateRef.current['self'] < 16) { // 60fps
+      return;
     }
-  }, [selectedIds, shapes]);
+    lastCursorUpdateRef.current['self'] = now;
 
-  const snapToGrid = (value) => {
-    if (!isGridSnap) return value;
-    return Math.round(value / gridSize) * gridSize;
+    // Emit cursor position with user info and current state
+    emitCursorMove(diagramId, {
+      position: point,
+      selection: selectedIds,
+      tool,
+      user: {
+        id: socket.id,
+        name: 'You',
+        color: '#FF0000'
+      }
+    });
+
+    if (readOnly) return;
+
+    if (isPanning && lastMousePosition) {
+      const dx = point.x - lastMousePosition.x;
+      const dy = point.y - lastMousePosition.y;
+      stage.position({
+        x: stage.x() + dx,
+        y: stage.y() + dy,
+      });
+      dispatch(setLastMousePosition(point));
+      
+      emitViewUpdate(diagramId, {
+        zoom: stage.scaleX(),
+        position: stage.position(),
+      });
+      return;
+    }
+
+    if (!isDrawing || !currentShape) return;
+
+    // Get precise point position considering zoom and pan
+    const stagePoint = {
+      x: (point.x - stage.x()) / stage.scaleX(),
+      y: (point.y - stage.y()) / stage.scaleY()
+    };
+
+    // For freehand, use exact mouse position without snapping
+    // For other tools, snap only if not drawing to avoid odd shapes
+    const pointToUse = tool === 'freehand' ? stagePoint : {
+      x: isDrawing ? stagePoint.x : snapToGrid(stagePoint.x),
+      y: isDrawing ? stagePoint.y : snapToGrid(stagePoint.y),
+    };
+
+    let updatedShape;
+    switch (tool) {
+      case 'rectangle': {
+        const width = pointToUse.x - startPoint.x;
+        const height = pointToUse.y - startPoint.y;
+        updatedShape = {
+          ...currentShape,
+          x: width < 0 ? pointToUse.x : startPoint.x,
+          y: height < 0 ? pointToUse.y : startPoint.y,
+          width: Math.abs(width),
+          height: Math.abs(height),
+        };
+        break;
+      }
+      case 'circle': {
+        const radius = Math.sqrt(
+          Math.pow(pointToUse.x - startPoint.x, 2) +
+          Math.pow(pointToUse.y - startPoint.y, 2)
+        );
+        updatedShape = {
+          ...currentShape,
+          x: startPoint.x,
+          y: startPoint.y,
+          radius,
+        };
+        break;
+      }
+      case 'line':
+      case 'arrow': {
+        // Add smoothing for lines and arrows
+        if (LINE_SMOOTHING) {
+          const dx = pointToUse.x - startPoint.x;
+          const dy = pointToUse.y - startPoint.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // Add intermediate points for smoother lines
+          const numPoints = Math.max(2, Math.floor(distance / 10));
+          const points = [];
+          
+          for (let i = 0; i <= numPoints; i++) {
+            const t = i / numPoints;
+            points.push(
+              startPoint.x + dx * t,
+              startPoint.y + dy * t
+            );
+          }
+          
+          updatedShape = {
+            ...currentShape,
+            points,
+          };
+        } else {
+          updatedShape = {
+            ...currentShape,
+            points: [startPoint.x, startPoint.y, pointToUse.x, pointToUse.y],
+          };
+        }
+        break;
+      }
+      case 'freehand': {
+        // Improved freehand drawing with smoothing
+        const points = currentShape.points;
+        const lastPoint = points.slice(-2);
+        
+        const distance = Math.sqrt(
+          Math.pow(pointToUse.x - lastPoint[0], 2) +
+          Math.pow(pointToUse.y - lastPoint[1], 2)
+        );
+        
+        if (distance >= MIN_DISTANCE) {
+          // Apply smoothing to new points
+          const smoothedPoints = [...points];
+          if (points.length >= 4) {
+            const prevPoint = points.slice(-4, -2);
+            const smoothedX = lastPoint[0] + (pointToUse.x - lastPoint[0]) * SMOOTHING_FACTOR;
+            const smoothedY = lastPoint[1] + (pointToUse.y - lastPoint[1]) * SMOOTHING_FACTOR;
+            
+            // Update last point with smoothed position
+            smoothedPoints[smoothedPoints.length - 2] = smoothedX;
+            smoothedPoints[smoothedPoints.length - 1] = smoothedY;
+          }
+          
+          // Add new point
+          smoothedPoints.push(pointToUse.x, pointToUse.y);
+          
+          // Reduce points if too many
+          if (smoothedPoints.length > 6) {
+            const reducedPoints = reducePoints(smoothedPoints, POINT_THRESHOLD);
+            updatedShape = {
+              ...currentShape,
+              points: reducedPoints,
+            };
+          } else {
+            updatedShape = {
+              ...currentShape,
+              points: smoothedPoints,
+            };
+          }
+          
+          setCurrentShape(updatedShape);
+        } else {
+          return;
+        }
+        break;
+      }
+      default:
+        return;
+    }
+
+    dispatch(updateShape(updatedShape));
+    emitShapeUpdate(diagramId, updatedShape);
+  }, [socket, diagramId, readOnly, isPanning, lastMousePosition, isDrawing, currentShape, tool, startPoint, dispatch, emitCursorMove, emitViewUpdate, emitShapeUpdate, selectedIds, zoom]);
+
+  // Add this helper function for point reduction
+  const reducePoints = (points, threshold) => {
+    if (points.length <= 4) return points;
+    
+    const result = [points[0], points[1]]; // Keep first point
+    let lastPoint = [points[0], points[1]];
+    
+    for (let i = 2; i < points.length; i += 2) {
+      const currentPoint = [points[i], points[i + 1]];
+      const distance = Math.sqrt(
+        Math.pow(currentPoint[0] - lastPoint[0], 2) +
+        Math.pow(currentPoint[1] - lastPoint[1], 2)
+      );
+      
+      if (distance >= threshold) {
+        result.push(currentPoint[0], currentPoint[1]);
+        lastPoint = currentPoint;
+      }
+    }
+    
+    // Always keep the last point
+    if (result[result.length - 2] !== points[points.length - 2] ||
+        result[result.length - 1] !== points[points.length - 1]) {
+      result.push(points[points.length - 2], points[points.length - 1]);
+    }
+    
+    return result;
   };
 
   // Handle space key for panning
   useEffect(() => {
+    if (readOnly) return;
+
     const handleKeyDown = (e) => {
       if (e.code === 'Space' && !isSpacePressed) {
         setIsSpacePressed(true);
@@ -137,587 +446,150 @@ const Canvas = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isSpacePressed, isPanning]);
+  }, [isSpacePressed, isPanning, readOnly]);
 
-  // Update getPointerPosition to handle zoom and pan correctly
-  const getPointerPosition = (e) => {
-    const stage = e.target.getStage();
-    const point = stage.getPointerPosition();
-    const scale = stage.scaleX();
-    
-    // Calculate the position relative to the stage container
-    const x = (point.x - stage.x()) / scale;
-    const y = (point.y - stage.y()) / scale;
-    
-    // Apply grid snapping if enabled
-    return {
-      x: snapToGrid(x),
-      y: snapToGrid(y)
-    };
-  };
+  // Update handleMouseUp to deselect shapes and reset state
+  const handleMouseUp = (e) => {
+    if (readOnly) return;
 
-  // Update handleMouseDown
-  const handleMouseDown = (e) => {
-    e.evt.preventDefault();
-    
-    const pos = getPointerPosition(e);
-    
-    // Handle panning with space key or middle mouse button
-    if (isSpacePressed || e.evt.button === 1) {
-      dispatch(setIsPanning(true));
-      dispatch(setLastMousePosition(pos));
+    if (isPanning) {
+      dispatch(setIsPanning(false));
       if (stageRef.current) {
-        stageRef.current.container().style.cursor = 'grabbing';
+        stageRef.current.container().style.cursor = isSpacePressed ? 'grab' : 'default';
       }
       return;
     }
 
-    // Handle selection
+    if (isDrawing) {
+      if (currentShape) {
+        dispatch(updateShape(currentShape));
+        emitShapeUpdate(diagramId, currentShape);
+      }
+      // Deselect the shape after creation or moving
+      dispatch(setSelectedIds([]));
+      setIsDrawing(false);
+      setCurrentShape(null);
+    }
+  };
+
+  // Update handleMouseDown to fix shape creation
+  const handleMouseDown = (e) => {
+    if (readOnly) return;
+
+    const stage = e.target.getStage();
+    const point = stage.getPointerPosition();
+    
+    // Convert point to stage coordinates considering zoom and pan
+    const stagePoint = {
+      x: (point.x - stage.x()) / stage.scaleX(),
+      y: (point.y - stage.y()) / stage.scaleY()
+    };
+
+    // For freehand, use exact mouse position without snapping
+    const pointToUse = tool === 'freehand' ? stagePoint : {
+      x: snapToGrid(stagePoint.x),
+      y: snapToGrid(stagePoint.y),
+    };
+
+    // If already drawing, don't start a new shape
+    if (isDrawing) return;
+
+    if (isSpacePressed || tool === 'pan') {
+      dispatch(setIsPanning(true));
+      dispatch(setLastMousePosition(point));
+      stage.container().style.cursor = 'grabbing';
+      return;
+    }
+
     if (tool === 'select') {
       const clickedOnEmpty = e.target === e.target.getStage();
       if (clickedOnEmpty) {
-        if (!e.evt.shiftKey) {
-          dispatch(setSelectedIds([]));
-        }
+        dispatch(setSelectedIds([]));
       }
       return;
     }
 
-    // Handle shape creation
-    if (tool === 'eraser') {
-      const shape = shapes.find(s => {
-        if (s.type === 'line' || s.type === 'arrow' || s.type === 'freehand' || s.type === 'polygon') {
-          if (s.type === 'polygon') {
-            return isPointInPolygon(pos, s.points);
-          }
-          const points = s.points;
-          for (let i = 0; i < points.length - 2; i += 2) {
-            const x1 = points[i];
-            const y1 = points[i + 1];
-            const x2 = points[i + 2];
-            const y2 = points[i + 3];
-            const distance = distanceToLine(pos.x, pos.y, x1, y1, x2, y2);
-            if (distance < 10) return true;
-          }
-        } else {
-          return isPointInShape(pos, s);
-        }
-        return false;
-      });
-
-      if (shape) {
-        dispatch(deleteShapes([shape.id]));
-        socket?.emit('shape-delete', { ids: [shape.id], diagramId });
-      }
-      return;
-    }
-
-    // Start drawing
+    // Start drawing new shape
     setIsDrawing(true);
-    setStartPoint(pos);
+    setStartPoint(pointToUse);
 
-    const shapeId = uuidv4();
-    let newShape = {
-      id: shapeId,
+    // Create new shape based on current tool
+    const newShape = {
+      id: uuidv4(),
       type: tool,
-      x: tool === 'line' || tool === 'arrow' || tool === 'freehand' ? 0 : pos.x,
-      y: tool === 'line' || tool === 'arrow' || tool === 'freehand' ? 0 : pos.y,
+      x: pointToUse.x,
+      y: pointToUse.y,
       stroke: strokeColor,
-      strokeWidth,
-      fill: fillColor,
-      dash: strokeStyle === 'dashed' ? [10, 5] : strokeStyle === 'dotted' ? [2, 2] : [],
+      strokeWidth: tool === 'freehand' ? 2 : strokeWidth,
+      strokeStyle: tool === 'freehand' ? 'solid' : strokeStyle,
+      fill: tool === 'sticky' ? '#fef08a' : fillColor,
+      fontSize,
+      draggable: !readOnly,
+      rotation: 0,
     };
 
-    // Set initial shape properties based on tool
+    // Add tool-specific properties
     switch (tool) {
       case 'rectangle':
-        newShape = { ...newShape, width: 0, height: 0 };
+        newShape.width = 100;
+        newShape.height = 100;
         break;
       case 'circle':
-        newShape = { ...newShape, radius: 0 };
+        newShape.radius = 50;
         break;
       case 'line':
       case 'arrow':
-        newShape = { ...newShape, points: [pos.x, pos.y, pos.x, pos.y] };
+        newShape.points = [pointToUse.x, pointToUse.y, pointToUse.x, pointToUse.y];
         break;
       case 'freehand':
-        newShape = { ...newShape, points: [pos.x, pos.y] };
-        break;
-      case 'polygon':
-        newShape = { 
-          ...newShape, 
-          points: [pos.x, pos.y],
-          isDrawing: true,
-          closed: false
-        };
+        newShape.points = [pointToUse.x, pointToUse.y];
         break;
       case 'text':
-        newShape = {
-          ...newShape,
-          text: 'Double-click to edit',
-          fontSize,
-          fontFamily: 'Handlee',
-          align: 'left',
-        };
+        newShape.width = 200;
+        newShape.height = 50;
+        newShape.text = '';
         break;
-      case 'diamond':
-        const size = 50; // Initial diamond size
-        const diamondPoints = [
-          pos.x, pos.y - size/2, // top
-          pos.x + size/2, pos.y, // right
-          pos.x, pos.y + size/2, // bottom
-          pos.x - size/2, pos.y, // left
-        ];
-        newShape = { 
-          ...newShape, 
-          points: diamondPoints,
-          size: size // Store size for resizing
-        };
+      case 'sticky':
+        newShape.width = 200;
+        newShape.height = 150;
+        newShape.text = 'Double click to edit...';
+        break;
+      case 'markdown':
+        newShape.width = 300;
+        newShape.height = 200;
+        newShape.text = '';
         break;
     }
 
     setCurrentShape(newShape);
     dispatch(addShape(newShape));
-    socket?.emit('shape-add', { ...newShape, diagramId });
-  };
+    emitShapeAdd(diagramId, newShape);
 
-  // Update handleMouseMove
-  const handleMouseMove = (e) => {
-    if (isPanning) {
-      e.evt.preventDefault();
-      const stage = stageRef.current;
-      if (!stage) return;
-
-      const newPos = {
-        x: stage.x() + (e.evt.clientX - lastMousePosition.x),
-        y: stage.y() + (e.evt.clientY - lastMousePosition.y),
-      };
-
-      stage.position(newPos);
-      stage.batchDraw();
-      dispatch(setLastMousePosition(newPos));
-
-      socket?.emit('view-update', {
-        diagramId,
-        zoom: stage.scaleX(),
-        position: newPos,
-      });
-      return;
-    }
-
-    if (!isDrawing || !currentShape) return;
-
-    const pos = getPointerPosition(e);
-    let updatedShape = { ...currentShape };
-
-    switch (tool) {
-      case 'rectangle':
-        updatedShape = {
-          ...updatedShape,
-          x: Math.min(startPoint.x, pos.x),
-          y: Math.min(startPoint.y, pos.y),
-          width: Math.abs(pos.x - startPoint.x),
-          height: Math.abs(pos.y - startPoint.y),
-        };
-        break;
-      case 'circle':
-        const radius = Math.sqrt(
-          Math.pow(pos.x - startPoint.x, 2) +
-          Math.pow(pos.y - startPoint.y, 2)
-        );
-        updatedShape = {
-          ...updatedShape,
-          radius,
-        };
-        break;
-      case 'line':
-      case 'arrow':
-        updatedShape = {
-          ...updatedShape,
-          points: [startPoint.x, startPoint.y, pos.x, pos.y],
-        };
-        break;
-      case 'freehand':
-        updatedShape = {
-          ...updatedShape,
-          points: [...updatedShape.points, pos.x, pos.y],
-        };
-        break;
-      case 'polygon':
-        if (currentShape.isDrawing) {
-          const lastPoint = currentShape.points.slice(-2);
-          const distance = Math.sqrt(
-            Math.pow(pos.x - lastPoint[0], 2) +
-            Math.pow(pos.y - lastPoint[1], 2)
-          );
-          if (distance > 10) { // Increased minimum distance for better control
-            updatedShape = {
-              ...updatedShape,
-              points: [...currentShape.points, pos.x, pos.y],
-            };
-          }
-        }
-        break;
-      case 'diamond':
-        const dx = pos.x - startPoint.x;
-        const dy = pos.y - startPoint.y;
-        const size = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
-        const diamondPoints = [
-          startPoint.x, startPoint.y - size/2, // top
-          startPoint.x + size/2, startPoint.y, // right
-          startPoint.x, startPoint.y + size/2, // bottom
-          startPoint.x - size/2, startPoint.y, // left
-        ];
-        updatedShape = {
-          ...updatedShape,
-          points: diamondPoints,
-          size: size
-        };
-        break;
-    }
-
-    setCurrentShape(updatedShape);
-    dispatch(updateShape(updatedShape));
-    socket?.emit('shape-update', { ...updatedShape, diagramId });
-  };
-
-  // Update handleMouseUp
-  const handleMouseUp = (e) => {
-    if (isPanning) {
-      dispatch(setIsPanning(false));
-      if (stageRef.current && !isSpacePressed) {
-        stageRef.current.container().style.cursor = 'default';
-      }
-      return;
-    }
-
-    if (!isDrawing || !currentShape) return;
-
-    if (tool === 'polygon') {
-      // Don't finish polygon on mouse up, wait for double click
-      return;
-    }
-
-    setIsDrawing(false);
-    setCurrentShape(null);
-    setStartPoint(null);
-  };
-
-  const handleDblClick = (e) => {
-    if (tool === 'polygon' && currentShape) {
-      // Finish polygon on double click
-      const updatedShape = {
-        ...currentShape,
-        isDrawing: false,
-        closed: true,
-        points: [...currentShape.points, currentShape.points[0], currentShape.points[1]] // Close the polygon
-      };
-      
-      dispatch(updateShape(updatedShape));
-      socket?.emit('shape-update', { ...updatedShape, diagramId });
-      
-      setIsDrawing(false);
-      setCurrentShape(null);
-      setStartPoint(null);
+    // Handle text-based tools
+    if (tool === 'text' || tool === 'sticky' || tool === 'markdown') {
+      handleTextEdit(newShape.id, newShape.text || '', pointToUse);
     }
   };
 
-  // Helper functions for eraser tool
-  const distanceToLine = (x, y, x1, y1, x2, y2) => {
-    const A = x - x1;
-    const B = y - y1;
-    const C = x2 - x1;
-    const D = y2 - y1;
-
-    const dot = A * C + B * D;
-    const len_sq = C * C + D * D;
-    let param = -1;
-
-    if (len_sq !== 0) {
-      param = dot / len_sq;
-    }
-
-    let xx, yy;
-
-    if (param < 0) {
-      xx = x1;
-      yy = y1;
-    } else if (param > 1) {
-      xx = x2;
-      yy = y2;
-    } else {
-      xx = x1 + param * C;
-      yy = y1 + param * D;
-    }
-
-    const dx = x - xx;
-    const dy = y - yy;
-
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  // Helper function to check if point is inside polygon using ray-casting algorithm
-  const isPointInPolygon = (point, polygonPoints) => {
-    let inside = false;
-    for (let i = 0, j = polygonPoints.length - 2; i < polygonPoints.length; j = i, i += 2) {
-      const xi = polygonPoints[i], yi = polygonPoints[i + 1];
-      const xj = polygonPoints[j], yj = polygonPoints[j + 1];
-      const intersect = ((yi > point.y) !== (yj > point.y)) &&
-        (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  };
-
-  const isPointInShape = (point, shape) => {
-    switch (shape.type) {
-      case 'rectangle':
-        return (
-          point.x >= shape.x &&
-          point.x <= shape.x + shape.width &&
-          point.y >= shape.y &&
-          point.y <= shape.y + shape.height
-        );
-      case 'circle':
-        const dx = point.x - shape.x;
-        const dy = point.y - shape.y;
-        return Math.sqrt(dx * dx + dy * dy) <= shape.radius;
-      case 'text':
-        // Approximate text area
-        const textWidth = shape.text.length * (shape.fontSize || fontSize) * 0.6;
-        const textHeight = (shape.fontSize || fontSize) * 1.2;
-        return (
-          point.x >= shape.x &&
-          point.x <= shape.x + textWidth &&
-          point.y >= shape.y &&
-          point.y <= shape.y + textHeight
-        );
-      case 'polygon':
-        return isPointInPolygon(point, shape.points);
-      default:
-        return false;
-    }
-  };
-
-  const handleWheel = (e) => {
-    e.evt.preventDefault();
-
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-
-    // Calculate the point under the mouse before scaling
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    };
-
-    // Calculate new scale
-    const direction = e.evt.deltaY > 0 ? -1 : 1;
-    const newScale = oldScale * (1 + direction * 0.1);
-    
-    // Limit zoom between 0.1 and 5
-    const clampedScale = Math.max(0.1, Math.min(5, newScale));
-
-    // Apply new scale
-    stage.scale({ x: clampedScale, y: clampedScale });
-
-    // Calculate new position to keep the point under the mouse
-    const newPos = {
-      x: pointer.x - mousePointTo.x * clampedScale,
-      y: pointer.y - mousePointTo.y * clampedScale,
-    };
-
-    // Update stage position
-    stage.position(newPos);
-    stage.batchDraw();
-
-    // Update Redux state and emit socket event
-    dispatch(setZoom(clampedScale));
-    socket?.emit('view-update', {
-      diagramId,
-      zoom: clampedScale,
-      position: newPos,
-    });
-  };
-
-  const handleTextDblClick = (shape) => {
-    setEditingTextId(shape.id);
-    setEditingTextValue(shape.text);
-    setEditingTextPos({ x: shape.x, y: shape.y });
-  };
-
-  const handleTextEditBlur = () => {
-    if (editingTextId) {
-      const updatedShape = shapes.find(s => s.id === editingTextId);
-      if (updatedShape) {
-        const newShape = { ...updatedShape, text: editingTextValue };
-        dispatch(updateShape(newShape));
-        socket?.emit('shape-update', { ...newShape, diagramId });
-      }
-    }
-    setEditingTextId(null);
-    setEditingTextValue('');
-  };
-
-  const renderShape = (shape) => {
-    const commonProps = {
-      id: shape.id,
-      x: shape.x,
-      y: shape.y,
-      stroke: shape.stroke,
-      strokeWidth: shape.strokeWidth,
-      fill: shape.fill,
-      dash: shape.dash,
-      draggable: tool === 'select',
-      onClick: (e) => {
-        if (tool === 'select') {
-          e.cancelBubble = true;
-          if (e.evt.shiftKey) {
-            dispatch(setSelectedIds([...selectedIds, shape.id]));
-          } else {
-            dispatch(setSelectedIds([shape.id]));
-          }
-        }
-      },
-      onDragEnd: (e) => {
-        const node = e.target;
-        const snappedPos = {
-          x: snapToGrid(node.x()),
-          y: snapToGrid(node.y()),
-        };
-        node.position(snappedPos);
-        const updatedShape = {
-          ...shape,
-          x: snappedPos.x,
-          y: snappedPos.y,
-        };
-        dispatch(updateShape(updatedShape));
-        socket?.emit('shape-update', { ...updatedShape, diagramId });
-      },
-    };
-
-    switch (shape.type) {
-      case 'rectangle':
-        return <Rect {...commonProps} width={shape.width} height={shape.height} />;
-      case 'circle':
-        return <Circle {...commonProps} radius={shape.radius} />;
-      case 'diamond':
-        return (
-          <Line
-            {...commonProps}
-            points={shape.points}
-            closed={true}
-            perfectDrawEnabled={false}
-            hitStrokeWidth={10}
-          />
-        );
-      case 'line':
-        return <Line {...commonProps} points={shape.points} />;
-      case 'arrow':
-        return <Arrow {...commonProps} points={shape.points} />;
-      case 'freehand':
-        return <Line {...commonProps} points={shape.points} tension={0.5} />;
-      case 'polygon':
-        return (
-          <Line
-            {...commonProps}
-            points={shape.points}
-            closed={shape.closed}
-            perfectDrawEnabled={false}
-            hitStrokeWidth={10}
-          />
-        );
-      case 'text':
-        return (
-          <Text
-            {...commonProps}
-            text={shape.text}
-            fontSize={shape.fontSize || fontSize}
-            fontFamily="Handlee"
-            fill={shape.fill}
-            align={shape.align || 'left'}
-            onDblClick={() => handleTextDblClick(shape)}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Add this new function to calculate grid lines
-  const getGridLines = () => {
-    if (!isGridSnap) return null;
-
-    const stage = stageRef.current;
-    if (!stage) return null;
-
-    const stageBox = stage.container().getBoundingClientRect();
-    const scale = stage.scaleX();
-    const stagePos = stage.position();
-    
-    // Calculate visible area with padding
-    const padding = 2000; // Increased padding for better infinite feel
-    const startX = -stagePos.x / scale - padding;
-    const endX = (stageBox.width - stagePos.x) / scale + padding;
-    const startY = -stagePos.y / scale - padding;
-    const endY = (stageBox.height - stagePos.y) / scale + padding;
-
-    // Calculate grid lines
-    const lines = [];
-    const gridStep = gridSize;
-
-    // Vertical lines
-    const startGridX = Math.floor(startX / gridStep) * gridStep;
-    const endGridX = Math.ceil(endX / gridStep) * gridStep;
-    for (let x = startGridX; x <= endGridX; x += gridStep) {
-      lines.push(
-        <Line
-          key={`v${x}`}
-          points={[x, startY, x, endY]}
-          stroke="#d1d5db"
-          strokeWidth={1}
-          opacity={0.5}
-        />
-      );
-    }
-
-    // Horizontal lines
-    const startGridY = Math.floor(startY / gridStep) * gridStep;
-    const endGridY = Math.ceil(endY / gridStep) * gridStep;
-    for (let y = startGridY; y <= endGridY; y += gridStep) {
-      lines.push(
-        <Line
-          key={`h${y}`}
-          points={[startX, y, endX, y]}
-          stroke="#d1d5db"
-          strokeWidth={1}
-          opacity={0.5}
-        />
-      );
-    }
-
-    return lines;
-  };
-
-  // Add keyboard event handlers
+  // Handle keyboard shortcuts
   useEffect(() => {
+    if (readOnly) return;
+
     const handleKeyDown = (e) => {
       // Undo (Ctrl+Z)
-      if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+      if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
         dispatch(undo());
         return;
       }
 
-      // Redo (Ctrl+Shift+Z)
-      if (e.ctrlKey && e.key === 'z' && e.shiftKey) {
+      // Redo (Ctrl+Y)
+      if (e.ctrlKey && e.key === 'y') {
         e.preventDefault();
         dispatch(redo());
         return;
@@ -734,7 +606,6 @@ const Canvas = () => {
       if (e.ctrlKey && e.key === 'v') {
         e.preventDefault();
         dispatch(pasteFromClipboard());
-        socket?.emit('shapes-paste', { diagramId });
         return;
       }
 
@@ -743,7 +614,7 @@ const Canvas = () => {
         e.preventDefault();
         if (selectedIds.length > 0) {
           dispatch(deleteShapes(selectedIds));
-          socket?.emit('shape-delete', { ids: selectedIds, diagramId });
+          emitShapeDelete(diagramId, selectedIds);
           dispatch(setSelectedIds([]));
         }
         return;
@@ -779,214 +650,734 @@ const Canvas = () => {
           case 'n':
             dispatch(setTool('sticky'));
             break;
+          case 'm':
+            dispatch(setTool('markdown'));
+            break;
         }
-      }
-
-      // Export (Ctrl+E)
-      if (e.ctrlKey && e.key === 'e') {
-        e.preventDefault();
-        handleExport();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dispatch, socket, diagramId, selectedIds]);
+  }, [dispatch, socket, diagramId, selectedIds, readOnly, emitShapeDelete]);
 
-  // Handle export
-  const handleExport = useCallback(() => {
+  // Update snapToGrid function to be more lenient
+  const snapToGrid = (value) => {
+    if (!isGridSnap) return value;
+    // Make snapping less aggressive
+    const snapThreshold = gridSize / 2;
+    const remainder = value % gridSize;
+    if (remainder < snapThreshold) {
+      return value - remainder;
+    } else if (remainder > gridSize - snapThreshold) {
+      return value + (gridSize - remainder);
+    }
+    return value;
+  };
+
+  // Handle mouse wheel for zooming
+  const handleWheel = (e) => {
+    e.evt.preventDefault();
+    if (!stageRef.current) return;
+
+    const scaleBy = 1.05;
+    const stage = stageRef.current;
+    const oldScale = stage.scaleX();
+
+    const pointer = stage.getPointerPosition();
+
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    };
+
+    const direction = e.evt.deltaY > 0 ? -1 : 1;
+    const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
+
+    stage.scale({ x: newScale, y: newScale });
+
+    const newPos = {
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    };
+
+    stage.position(newPos);
+    dispatch(setZoom(newScale));
+    emitViewUpdate(diagramId, { zoom: newScale, position: newPos });
+  };
+
+  // Add this function to handle text editing
+  const handleTextEdit = (shapeId, text, position) => {
+    if (readOnly) return;
     const stage = stageRef.current;
     if (!stage) return;
 
-    // Export as PNG
-    const dataURL = stage.toDataURL();
-    const link = document.createElement('a');
-    link.download = `canvas-${new Date().toISOString()}.png`;
-    link.href = dataURL;
-    link.click();
-
-    // Export as JSON
-    dispatch(exportCanvas());
-  }, [dispatch]);
-
-  // Handle import
-  const handleImport = useCallback((event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        dispatch(importCanvas(data));
-        // Emit import event to other users
-        socket?.emit('canvas-import', { diagramId, data });
-      } catch (error) {
-        console.error('Error importing canvas:', error);
-      }
+    const absPos = stage.container().getBoundingClientRect();
+    const scale = stage.scaleX();
+    
+    setEditingTextId(shapeId);
+    setEditingTextValue(text);
+    
+    // Calculate position considering stage transform
+    const stagePoint = {
+      x: (position.x - stage.x()) / scale,
+      y: (position.y - stage.y()) / scale
     };
-    reader.readAsText(file);
-  }, [dispatch, socket, diagramId]);
+    
+    setEditingTextPos({
+      x: stagePoint.x + absPos.left,
+      y: stagePoint.y + absPos.top,
+    });
+  };
 
-  // Update collaborator cursor position
-  useEffect(() => {
-    if (!socket || !diagramId) return;
+  // Add helper function to calculate distance from point to line segment
+  const distanceToLine = (x, y, x1, y1, x2, y2) => {
+    const A = x - x1;
+    const B = y - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
 
-    const updateCursor = (e) => {
-      const stage = stageRef.current;
-      if (!stage) return;
+    const dot = A * C + B * D;
+    const len_sq = C * C + D * D;
+    let param = -1;
 
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
+    if (len_sq !== 0) {
+      param = dot / len_sq;
+    }
 
-      const position = {
-        x: (pointer.x - stage.x()) / stage.scaleX(),
-        y: (pointer.y - stage.y()) / stage.scaleY(),
+    let xx, yy;
+
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
+    } else {
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    const dx = x - xx;
+    const dy = y - yy;
+
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Add markdown panel toggle handler
+  const toggleMarkdownPanel = () => {
+    setIsMarkdownPanelOpen(!isMarkdownPanelOpen);
+  };
+
+  // Update markdown handling
+  const handleMarkdownEdit = (shapeId, text, position) => {
+    if (readOnly) return;
+    setEditingMarkdownId(shapeId);
+    setEditingMarkdownValue(text || '');
+    setIsMarkdownPanelOpen(true);
+  };
+
+  // Handle markdown save
+  const handleMarkdownSave = () => {
+    if (!editingMarkdownId) return;
+    
+    const shape = shapes.find((s) => s.id === editingMarkdownId);
+    if (shape) {
+      const updatedShape = {
+        ...shape,
+        text: editingMarkdownValue,
       };
+      dispatch(updateShape(updatedShape));
+      emitShapeUpdate(diagramId, updatedShape);
+    }
+    setEditingMarkdownId(null);
+    setEditingMarkdownValue('');
+  };
 
-      dispatch(updateCollaboratorPosition({
-        id: socket.id,
-        position,
-        color: '#ff0000', // You can make this dynamic based on user
-        name: 'User', // You can make this dynamic based on user
-      }));
-
-      socket.emit('cursor-update', { diagramId, position });
-    };
-
-    window.addEventListener('mousemove', updateCursor);
-    return () => window.removeEventListener('mousemove', updateCursor);
-  }, [socket, diagramId, dispatch]);
-
-  // Handle collaborator cursors
-  useEffect(() => {
-    if (!socket || !diagramId) return;
-
-    socket.on('cursor-update', ({ userId, position, color, name }) => {
-      dispatch(updateCollaboratorPosition({
-        id: userId,
-        position,
-        color,
-        name,
-      }));
-    });
-
-    socket.on('user-disconnected', (userId) => {
-      dispatch(removeCollaborator(userId));
-    });
-
-    return () => {
-      socket.off('cursor-update');
-      socket.off('user-disconnected');
-    };
-  }, [socket, diagramId, dispatch]);
-
-  // Render collaborator cursors
+  // Update the collaborator cursor rendering
   const renderCollaboratorCursors = () => {
-    return collaborators.map((collaborator) => {
-      if (collaborator.id === socket?.id) return null; // Don't render own cursor
+    return Object.entries(collaboratorCursors).map(([userId, data]) => {
+      const { position, user, lastUpdate, selection, tool } = data;
+      const isActive = Date.now() - lastUpdate < 1000;
+      const isSelecting = tool === 'select' && selection?.length > 0;
+
       return (
-        <Group key={collaborator.id}>
-          <Circle
-            x={collaborator.position.x}
-            y={collaborator.position.y}
-            radius={5}
-            fill={collaborator.color}
-            stroke="#fff"
-            strokeWidth={1}
+        <Group key={userId} x={position.x} y={position.y}>
+          {/* Cursor */}
+          <RegularPolygon
+            sides={3}
+            radius={8}
+            fill={user.color}
+            rotation={-90}
+            offsetY={-4}
+            shadowColor="black"
+            shadowBlur={4}
+            shadowOpacity={0.2}
+            shadowOffset={{ x: 0, y: 2 }}
           />
-          <Text
-            text={collaborator.name}
-            fontSize={12}
-            fill={collaborator.color}
-            x={8}
-            y={-5}
-            padding={4}
-            background="#fff"
-            cornerRadius={4}
-          />
+          {/* User label with tool info */}
+          <Group x={15} y={-20}>
+            <Rect
+              fill={user.color}
+              cornerRadius={4}
+              width={120}
+              height={24}
+              shadowColor="black"
+              shadowBlur={4}
+              shadowOpacity={0.2}
+              shadowOffset={{ x: 0, y: 2 }}
+            />
+            <Text
+              text={`${user.name} (${tool})`}
+              fill="white"
+              fontSize={12}
+              padding={6}
+              width={120}
+              align="center"
+            />
+          </Group>
+          {/* Activity indicator */}
+          {isActive && (
+            <Circle
+              x={0}
+              y={0}
+              radius={4}
+              fill={user.color}
+              opacity={0.6}
+              shadowColor="black"
+              shadowBlur={2}
+              shadowOpacity={0.2}
+            />
+          )}
+          {/* Selection highlight */}
+          {isSelecting && selection.map(shapeId => {
+            const shape = shapes.find(s => s.id === shapeId);
+            if (!shape) return null;
+            
+            return (
+              <Group key={shapeId} x={shape.x} y={shape.y}>
+                <Rect
+                  width={shape.width}
+                  height={shape.height}
+                  stroke={user.color}
+                  strokeWidth={2}
+                  dash={[5, 5]}
+                  opacity={0.5}
+                  fill="transparent"
+                  shadowColor={user.color}
+                  shadowBlur={4}
+                  shadowOpacity={0.2}
+                />
+              </Group>
+            );
+          })}
         </Group>
       );
     });
   };
 
-  const renderCanvas = () => {
+  // Update the collaborator presence panel
+  const renderCollaboratorPresence = () => {
     return (
-      <Stage
-        ref={stageRef}
-        width={window.innerWidth}
-        height={window.innerHeight}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onDblClick={handleDblClick}
-        onWheel={handleWheel}
-        scale={{ x: zoom, y: zoom }}
-        className={`touch-none ${isSpacePressed ? 'cursor-grab' : ''} ${isPanning ? 'cursor-grabbing' : ''}`}
-      >
-        <Layer>
-          {/* Grid */}
-          {getGridLines()}
-
-          {/* Shapes */}
-          {shapes.map(renderShape)}
-
-          {/* Collaborator Cursors */}
-          {renderCollaboratorCursors()}
-
-          {/* Transformer for selection */}
-          {tool === 'select' && selectedIds.length > 0 && (
-            <Transformer
-              ref={transformerRef}
-              boundBoxFunc={(oldBox, newBox) => {
-                const minSize = 5;
-                if (newBox.width < minSize || newBox.height < minSize) {
-                  return oldBox;
-                }
-                return newBox;
-              }}
-              rotateEnabled={true}
-              enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-            />
-          )}
-        </Layer>
-      </Stage>
+      <div className="fixed top-4 right-4 z-50">
+        <div className="bg-white/95 rounded-lg shadow-lg p-3 space-y-2 backdrop-blur-sm border border-gray-200/50">
+          <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            Collaborators
+          </h3>
+          {Object.entries(collaboratorPresence).map(([userId, user]) => {
+            const cursor = collaboratorCursors[userId];
+            const isActive = cursor && Date.now() - cursor.lastUpdate < 2000;
+            
+            return (
+              <div
+                key={userId}
+                className="flex items-center justify-between space-x-2 p-1 rounded-md hover:bg-gray-100"
+              >
+                <div className="flex items-center space-x-2">
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{ 
+                      backgroundColor: user.color,
+                      boxShadow: isActive ? `0 0 0 2px ${user.color}40` : 'none'
+                    }}
+                  />
+                  <span className="text-sm text-gray-600">
+                    {user.name}
+                  </span>
+                </div>
+                {cursor && (
+                  <span className="text-xs text-gray-500">
+                    {cursor.tool}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     );
   };
 
+  // Add effect to ensure tool state is properly initialized
+  useEffect(() => {
+    // Initialize tool state if not set
+    if (!tool) {
+      dispatch(setTool('select'));
+    }
+
+    // Reset tool state when component unmounts
+    return () => {
+      dispatch(setTool('select'));
+    };
+  }, [dispatch, tool]);
+
+  // Add effect to handle tool changes
+  useEffect(() => {
+    if (!stageRef.current) return;
+
+    // Update cursor based on tool
+    const cursorMap = {
+      select: 'default',
+      rectangle: 'crosshair',
+      circle: 'crosshair',
+      line: 'crosshair',
+      arrow: 'crosshair',
+      freehand: 'crosshair',
+      text: 'text',
+      sticky: 'crosshair',
+      markdown: 'crosshair',
+      pan: 'grab',
+      eraser: 'crosshair'
+    };
+
+    stageRef.current.container().style.cursor = cursorMap[tool] || 'default';
+  }, [tool]);
+
   return (
-    <div className="w-full h-screen bg-gray-100 overflow-hidden relative">
-      <Toolbar onExport={handleExport} onImport={handleImport} />
-      {editingTextId && (
-        <div
-          style={{
-            position: 'absolute',
-            top: editingTextPos.y,
-            left: editingTextPos.x,
-            zIndex: 100,
-            background: 'white',
-            border: '1px solid #ccc',
-            fontFamily: 'Handlee',
-            fontSize: fontSize,
-            color: 'black',
-            minWidth: 100,
-          }}
-          contentEditable
-          suppressContentEditableWarning
-          onBlur={handleTextEditBlur}
-          onInput={e => setEditingTextValue(e.currentTarget.textContent)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleTextEditBlur();
-            }
-          }}
-          autoFocus
-        >
-          {editingTextValue}
+    <div className="relative w-full h-full bg-white">
+      {/* Dashboard Button */}
+      <button
+        onClick={() => navigate('/dashboard')}
+        className="fixed top-4 left-4 z-50 flex items-center px-4 py-2 bg-white rounded-lg shadow-lg hover:bg-gray-100"
+      >
+        <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        <span className="text-gray-700">Dashboard</span>
+      </button>
+
+      {/* Markdown Editor Panel */}
+      <div
+        ref={markdownPanelRef}
+        className={`fixed left-0 top-0 h-full bg-white shadow-lg transition-transform duration-300 ease-in-out z-50 ${
+          isMarkdownPanelOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        style={{ width: '400px' }}
+      >
+        <div className="flex flex-col h-full">
+          {/* Panel Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Markdown Editor
+            </h2>
+            <button
+              onClick={() => {
+                setIsMarkdownPanelOpen(false);
+                setEditingMarkdownId(null);
+              }}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Editor Content */}
+          <div className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
+            {/* Editor */}
+            <div className="flex-1 flex flex-col">
+              <textarea
+                value={editingMarkdownValue}
+                onChange={(e) => setEditingMarkdownValue(e.target.value)}
+                className="flex-1 w-full p-3 rounded-lg border border-gray-200 text-gray-900 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Write your markdown here..."
+              />
+            </div>
+
+            {/* Preview */}
+            <div className="flex-1 overflow-auto p-3 rounded-lg border border-gray-200">
+              <div className="prose max-w-none">
+                <ReactMarkdown>{editingMarkdownValue}</ReactMarkdown>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => {
+                  setIsMarkdownPanelOpen(false);
+                  setEditingMarkdownId(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkdownSave}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Canvas Container */}
+      <div className={`absolute inset-0 transition-all duration-300 ${
+        isMarkdownPanelOpen ? 'left-[400px]' : 'left-0'
+      }`}>
+        <Stage
+          ref={stageRef}
+          width={stageWidth}
+          height={stageHeight}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
+          draggable={isPanning}
+          className="bg-white"
+        >
+          {/* Grid Layer - More subtle grid */}
+          {isGridVisible && (
+            <Layer>
+              {Array.from({ length: Math.ceil(stageWidth / gridSize) + 1 }).map((_, i) => (
+                <Line
+                  key={`v${i}`}
+                  points={[i * gridSize, 0, i * gridSize, stageHeight]}
+                  stroke="#e5e7eb"
+                  strokeWidth={0.5}
+                  opacity={0.3}
+                  dash={[5, 5]} // Make grid lines dashed
+                />
+              ))}
+              {Array.from({ length: Math.ceil(stageHeight / gridSize) + 1 }).map((_, i) => (
+                <Line
+                  key={`h${i}`}
+                  points={[0, i * gridSize, stageWidth, i * gridSize]}
+                  stroke="#e5e7eb"
+                  strokeWidth={0.5}
+                  opacity={0.3}
+                  dash={[5, 5]} // Make grid lines dashed
+                />
+              ))}
+            </Layer>
+          )}
+
+          {/* Shapes Layer */}
+          <Layer>
+            {shapes.map((shape) => {
+              const commonProps = {
+                id: shape.id,
+                draggable: !readOnly && tool === 'select', // Only draggable in select mode
+                onClick: (e) => {
+                  if (readOnly) return;
+                  if (tool === 'select') {
+                    e.cancelBubble = true;
+                    if (e.evt.shiftKey) {
+                      // Add to selection if shift is pressed
+                      dispatch(setSelectedIds([...selectedIds, shape.id]));
+                    } else {
+                      // Select single shape
+                      dispatch(setSelectedIds([shape.id]));
+                    }
+                  }
+                },
+                onDragStart: (e) => {
+                  if (readOnly || tool !== 'select') return;
+                  dispatch(setIsDragging(true));
+                },
+                onDragEnd: (e) => {
+                  if (readOnly || tool !== 'select') return;
+                  dispatch(setIsDragging(false));
+                  const node = e.target;
+                  const newShape = {
+                    ...shape,
+                    x: snapToGrid(node.x()),
+                    y: snapToGrid(node.y()),
+                  };
+                  dispatch(updateShape(newShape));
+                  emitShapeUpdate(diagramId, newShape);
+                },
+              };
+
+              switch (shape.type) {
+                case 'rectangle':
+                  return (
+                    <Rect
+                      key={shape.id}
+                      {...commonProps}
+                      x={shape.x}
+                      y={shape.y}
+                      width={shape.width}
+                      height={shape.height}
+                      fill={shape.fill}
+                      stroke={shape.stroke}
+                      strokeWidth={shape.strokeWidth}
+                      strokeStyle={shape.strokeStyle}
+                    />
+                  );
+                case 'circle':
+                  return (
+                    <Circle
+                      key={shape.id}
+                      {...commonProps}
+                      x={shape.x}
+                      y={shape.y}
+                      radius={shape.radius}
+                      fill={shape.fill}
+                      stroke={shape.stroke}
+                      strokeWidth={shape.strokeWidth}
+                      strokeStyle={shape.strokeStyle}
+                    />
+                  );
+                case 'line':
+                case 'arrow':
+                  return (
+                    <Arrow
+                      key={shape.id}
+                      {...commonProps}
+                      points={shape.points}
+                      fill={shape.stroke}
+                      stroke={shape.stroke}
+                      strokeWidth={shape.strokeWidth}
+                      strokeStyle={shape.strokeStyle}
+                      pointerLength={shape.type === 'arrow' ? 10 : 0}
+                      pointerWidth={shape.type === 'arrow' ? 10 : 0}
+                    />
+                  );
+                case 'freehand':
+                  return (
+                    <Line
+                      key={shape.id}
+                      {...commonProps}
+                      points={shape.points}
+                      stroke={shape.stroke}
+                      strokeWidth={shape.strokeWidth}
+                      tension={0.5}
+                      lineCap="round"
+                      lineJoin="round"
+                      globalCompositeOperation="source-over"
+                      perfectDrawEnabled={false}
+                      hitStrokeWidth={20}
+                      listening={!readOnly}
+                      bezier={false} // Disable bezier curves for more accurate freehand drawing
+                    />
+                  );
+                case 'text':
+                  return (
+                    <Text
+                      key={shape.id}
+                      {...commonProps}
+                      x={shape.x}
+                      y={shape.y}
+                      text={shape.text}
+                      fontSize={shape.fontSize}
+                      fill={shape.stroke}
+                      onDblClick={(e) => {
+                        const node = e.target;
+                        const pos = node.getAbsolutePosition();
+                        handleTextEdit(shape.id, shape.text, pos);
+                      }}
+                    />
+                  );
+                case 'sticky':
+                  return (
+                    <Group key={shape.id} {...commonProps} x={shape.x} y={shape.y}>
+                      <Rect
+                        width={shape.width}
+                        height={shape.height}
+                        fill={shape.fill}
+                        stroke={shape.stroke}
+                        strokeWidth={shape.strokeWidth}
+                        cornerRadius={8}
+                        shadowColor="rgba(0,0,0,0.2)"
+                        shadowBlur={10}
+                        shadowOffset={{ x: 2, y: 2 }}
+                        shadowOpacity={0.3}
+                      />
+                      <Text
+                        text={shape.text || 'Double click to edit...'}
+                        width={shape.width - 20}
+                        height={shape.height - 20}
+                        x={10}
+                        y={10}
+                        fontSize={shape.fontSize}
+                        fill={shape.stroke}
+                        padding={10}
+                        align="left"
+                        verticalAlign="top"
+                        onDblClick={(e) => {
+                          const node = e.target;
+                          const pos = node.getAbsolutePosition();
+                          handleTextEdit(shape.id, shape.text, pos);
+                        }}
+                      />
+                      {/* Resize handle */}
+                      {!readOnly && (
+                        <Rect
+                          x={shape.width - 20}
+                          y={shape.height - 20}
+                          width={20}
+                          height={20}
+                          fill="transparent"
+                          stroke="transparent"
+                          onMouseEnter={(e) => {
+                            e.target.getStage().container().style.cursor = 'nwse-resize';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.getStage().container().style.cursor = 'default';
+                          }}
+                        />
+                      )}
+                    </Group>
+                  );
+                case 'markdown':
+                  return (
+                    <Group key={shape.id} {...commonProps} x={shape.x} y={shape.y}>
+                      <Rect
+                        width={shape.width}
+                        height={shape.height}
+                        fill="#ffffff"
+                        stroke={shape.stroke}
+                        strokeWidth={shape.strokeWidth}
+                        cornerRadius={8}
+                        shadowColor="rgba(0,0,0,0.1)"
+                        shadowBlur={5}
+                        shadowOffset={{ x: 1, y: 1 }}
+                        shadowOpacity={0.2}
+                      />
+                      <Text
+                        text={shape.text}
+                        width={shape.width - 20}
+                        height={shape.height - 20}
+                        x={10}
+                        y={10}
+                        fontSize={shape.fontSize}
+                        fill={shape.stroke}
+                        padding={10}
+                        onDblClick={(e) => {
+                          const node = e.target;
+                          const pos = node.getAbsolutePosition();
+                          handleMarkdownEdit(shape.id, shape.text, pos);
+                        }}
+                      />
+                    </Group>
+                  );
+                default:
+                  return null;
+              }
+            })}
+
+            {/* Transformer for selected shapes */}
+            {!readOnly && selectedIds.length > 0 && (
+              <Transformer
+                ref={transformerRef}
+                boundBoxFunc={(oldBox, newBox) => {
+                  const minSize = 100; // Minimum size for sticky notes
+                  if (newBox.width < minSize || newBox.height < minSize) {
+                    return oldBox;
+                  }
+                  return newBox;
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target;
+                  const scaleX = node.scaleX();
+                  const scaleY = node.scaleY();
+                  
+                  node.scaleX(1);
+                  node.scaleY(1);
+                  
+                  const updatedShape = {
+                    ...shapes.find(s => s.id === node.id()),
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.round(node.width() * scaleX),
+                    height: Math.round(node.height() * scaleY),
+                    rotation: node.rotation(),
+                  };
+                  
+                  dispatch(updateShape(updatedShape));
+                  emitShapeUpdate(diagramId, updatedShape);
+                }}
+                enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+                keepRatio={false}
+              />
+            )}
+
+            {/* Collaborator Cursors Layer */}
+            {/* <Layer>
+              {renderCollaboratorCursors()}
+            </Layer> */}
+          </Layer>
+        </Stage>
+      </div>
+
+      {/* Text Editor Portal */}
+      {editingTextId && !readOnly && (
+        <Portal>
+          <div
+            className="fixed z-[1000]"
+            style={{
+              position: 'absolute',
+              top: editingTextPos.y,
+              left: editingTextPos.x,
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <input
+              value={editingTextValue}
+              onChange={(e) => setEditingTextValue(e.target.value)}
+              onBlur={() => {
+                const shape = shapes.find((s) => s.id === editingTextId);
+                if (shape) {
+                  const updatedShape = {
+                    ...shape,
+                    text: editingTextValue,
+                  };
+                  dispatch(updateShape(updatedShape));
+                  emitShapeUpdate(diagramId, updatedShape);
+                }
+                setEditingTextId(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.target.blur();
+                }
+              }}
+              className="border-none p-0 m-0 bg-transparent outline-none font-inherit"
+              style={{
+                fontSize: `${shapes.find(s => s.id === editingTextId)?.fontSize || 16}px`,
+                color: shapes.find(s => s.id === editingTextId)?.stroke || '#000',
+              }}
+            />
+          </div>
+        </Portal>
       )}
-      {renderCanvas()}
+
+      {/* Sticky Notes Panel */}
+      <StickyNotes />
+
+      {/* Markdown Editor Panel */}
+      <MarkdownEditor />
+
+      {/* Collaborator Presence Panel */}
+      {renderCollaboratorPresence()}
     </div>
   );
 };

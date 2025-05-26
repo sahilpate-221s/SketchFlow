@@ -28,6 +28,7 @@ router.get('/', auth, async (req, res) => {
     const diagrams = await Diagram.findByUser(req.user._id);
     res.json(diagrams);
   } catch (error) {
+    console.error('Error deleting diagram:', error.stack || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -108,14 +109,17 @@ router.delete('/:id', auth, validation.validateObjectId, async (req, res) => {
       return res.status(404).json({ error: 'Diagram not found' });
     }
 
+    console.log(`Deleting diagram ${diagram._id} owned by ${diagram.owner} requested by user ${req.user._id}`);
+
     // Only owner can delete
     if (diagram.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Delete access denied' });
     }
 
-    await diagram.remove();
+    await diagram.deleteOne();
     res.json({ message: 'Diagram deleted' });
   } catch (error) {
+    console.error('Error deleting diagram:', error.stack || error);
     res.status(500).json({ error: error.message });
   }
 });

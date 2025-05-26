@@ -13,9 +13,10 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
-    // Redirect to login page but save the attempted url
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // Allow access if user is authenticated or is a guest
+  if (!isAuthenticated && user?.role !== 'guest') {
+    // Redirect to landing page but save the attempted url
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   return children;

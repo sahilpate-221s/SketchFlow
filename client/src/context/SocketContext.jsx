@@ -4,12 +4,12 @@ import {
   socket, 
   connectSocket, 
   disconnectSocket,
-  joinDiagram,
-  leaveDiagram,
+  joinDiagram as joinDiagramSocket,
+  leaveDiagram as leaveDiagramSocket,
   emitShapeAdd,
   emitShapeUpdate,
   emitShapeDelete,
-  emitCursorUpdate,
+  emitCursorMove,
   emitViewUpdate,
 } from '../socket';
 
@@ -44,13 +44,16 @@ export const SocketProvider = ({ children }) => {
   const value = {
     socket,
     isConnected: socket?.connected || false,
-    joinDiagram: (diagramId) => joinDiagram(diagramId, user),
-    leaveDiagram,
-    updateShape: emitShapeUpdate,
-    addShape: emitShapeAdd,
-    deleteShapes: emitShapeDelete,
-    updateCursor: emitCursorUpdate,
-    updateView: emitViewUpdate,
+    // Diagram room functions
+    joinDiagram: (diagramId) => joinDiagramSocket(diagramId, user),
+    leaveDiagram: (diagramId) => leaveDiagramSocket(diagramId, user?._id),
+    // Shape functions
+    emitShapeAdd,
+    emitShapeUpdate,
+    emitShapeDelete,
+    // Collaboration functions
+    emitCursorMove,
+    emitViewUpdate,
   };
 
   return (

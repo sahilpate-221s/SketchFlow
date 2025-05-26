@@ -1,19 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../utils/axios';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Configure axios defaults
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -28,13 +20,12 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/me`);
+      const response = await axios.get('/api/auth/me');
       setUser(response.data);
     } catch (error) {
       console.error('Auth check failed:', error);
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
-        delete axios.defaults.headers.common['Authorization'];
       }
       setUser({ role: 'guest' });
     } finally {
@@ -44,16 +35,14 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+      const response = await axios.post('/api/auth/login', {
         email,
         password
       });
 
       const { token, user } = response.data;
       localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
-      // Navigation should be handled by caller
       return { success: true };
     } catch (error) {
       return { 
@@ -65,16 +54,14 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password) => {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+      const response = await axios.post('/api/auth/register', {
         email,
         password
       });
 
       const { token, user } = response.data;
       localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
-      // Navigation should be handled by caller
       return { success: true };
     } catch (error) {
       return { 
@@ -86,9 +73,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
     setUser({ role: 'guest' });
-    // Navigation should be handled by caller
   };
 
   const value = {

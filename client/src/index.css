@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Handlee&display=swap');
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+
 
 @layer base {
   html {
     font-family: 'Handlee', cursive;
   }
   
-  /* Dark mode transitions */
+  /* Transitions */
   * {
-    @apply transition-colors duration-200;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
   }
 }
 
@@ -20,25 +20,8 @@
   touch-action: none;
 }
 
-/* Dark mode styles */
-.dark input,
-.dark textarea,
-.dark select {
-  @apply bg-dark-surface border-dark-border text-dark-text;
-}
-
-.dark button:not(.canvas-button) {
-  @apply bg-dark-surface hover:bg-dark-border text-dark-text border-dark-border;
-}
-
-.dark .card,
-.dark .panel,
-.dark .sidebar {
-  @apply bg-dark-surface border-dark-border text-dark-text;
-}
-
-/* Preserve canvas colors in dark mode */
-.dark .diagram-canvas {
+/* Preserve canvas colors */
+.diagram-canvas {
   /* Canvas background will be controlled separately */
-  @apply bg-white;
+  background-color: #FFFFFF;
 }

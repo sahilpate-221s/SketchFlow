@@ -1,21 +1,34 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { AuthProvider } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { store } from './store'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import Home from './pages/Home'
+import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
-import Canvas from './components/Canvas'
-import MainLayout from './components/MainLayout'
-import PrivateRoute from './components/PrivateRoute'
 import Board from './pages/Board'
 import NotFound from './pages/NotFound'
+import { useAuth } from './context/AuthContext'
+import PrivateRoute from './components/PrivateRoute'
+// import ThemeToggle from './components/ThemeToggle'
 
-// Import pages (to be created)
-const DiagramEditor = () => <div className="p-4">Diagram Editor Page</div>
+// Custom route component for board access
+const BoardRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+      </div>
+    );
+  }
+
+  // Allow access if user is authenticated or if trying to access a public diagram
+  // The actual access control will be handled by the server
+  return children;
+};
 
 const App = () => {
   return (
@@ -25,16 +38,16 @@ const App = () => {
           <AuthProvider>
             <SocketProvider>
               <div className="min-h-screen font-handwriting transition-colors duration-300
-                            bg-gray-100 text-gray-900
-                            dark:bg-matte-black dark:text-dark-text">
+                            bg-white text-gray-900
+                            dark:bg-black dark:text-gray-100">
+                {/* <ThemeToggle /> */}
                 <Routes>
                   {/* Public routes */}
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
+                  <Route path="/" element={<Landing />} />
 
                   {/* Protected routes */}
                   <Route
-                    path="/"
+                    path="/dashboard"
                     element={
                       <PrivateRoute>
                         <Dashboard />
@@ -42,19 +55,11 @@ const App = () => {
                     }
                   />
                   <Route
-                    path="/home"
-                    element={
-                      <PrivateRoute>
-                        <Home />
-                      </PrivateRoute>
-                    }
-                  />
-                  <Route
                     path="/board/:id"
                     element={
-                      <PrivateRoute>
+                      <BoardRoute>
                         <Board />
-                      </PrivateRoute>
+                      </BoardRoute>
                     }
                   />
 

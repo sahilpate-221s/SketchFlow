@@ -16,8 +16,8 @@ const initialState = {
   fontFamily: 'Handlee',
   gridSize: 20,
   zoom: 1,
-  isGridSnap: true,
-  isGridVisible: true,
+  isGridSnap: false,
+  isGridVisible: false,
   textAlign: 'left',
   stickyNotes: [],
   markdownContent: '',
@@ -27,6 +27,8 @@ const initialState = {
   isDragging: false,
   isPanning: false,
   lastMousePosition: { x: 0, y: 0 },
+  canUndo: false,
+  canRedo: false,
 };
 
 const canvasSlice = createSlice({
@@ -46,23 +48,61 @@ const canvasSlice = createSlice({
         stickyNotes: [...state.stickyNotes],
       });
       state.historyIndex++;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
     // Shape actions
     addShape: (state, action) => {
-      state.shapes.push(action.payload);
-      // Clear redo history when new action is performed
+      const newShape = action.payload;
+      
+      // Add default properties based on shape type
+      switch (newShape.type) {
+        case 'sticky':
+          newShape.width = newShape.width || 200;
+          newShape.height = newShape.height || 150;
+          newShape.fill = newShape.fill || '#fef08a';
+          newShape.text = newShape.text || '';
+          newShape.fontSize = newShape.fontSize || 16;
+          break;
+        case 'markdown':
+          newShape.width = newShape.width || 300;
+          newShape.height = newShape.height || 200;
+          newShape.fill = '#ffffff';
+          newShape.text = newShape.text || '';
+          newShape.fontSize = newShape.fontSize || 14;
+          break;
+        case 'text':
+          newShape.width = newShape.width || 200;
+          newShape.height = newShape.height || 50;
+          newShape.text = newShape.text || '';
+          newShape.fontSize = newShape.fontSize || 16;
+          break;
+        case 'rectangle':
+          newShape.width = newShape.width || 100;
+          newShape.height = newShape.height || 100;
+          break;
+        case 'circle':
+          newShape.radius = newShape.radius || 50;
+          break;
+      }
+
+      state.shapes.push(newShape);
       state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push({ type: 'ADD_SHAPE', shape: action.payload });
-      state.historyIndex += 1;
+      state.history.push([...state.shapes]);
+      state.historyIndex++;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
     updateShape: (state, action) => {
-      const { id, ...updates } = action.payload;
-      const shape = state.shapes.find(s => s.id === id);
-      if (shape) {
-        Object.assign(shape, updates);
+      const updatedShape = action.payload;
+      const index = state.shapes.findIndex(s => s.id === updatedShape.id);
+      if (index !== -1) {
+        state.shapes[index] = updatedShape;
         state.history = state.history.slice(0, state.historyIndex + 1);
-        state.history.push({ type: 'UPDATE_SHAPE', id, updates });
-        state.historyIndex += 1;
+        state.history.push([...state.shapes]);
+        state.historyIndex++;
+        state.canUndo = state.historyIndex > 0;
+        state.canRedo = false;
       }
     },
     deleteShapes: (state, action) => {
@@ -73,17 +113,23 @@ const canvasSlice = createSlice({
       state.history = state.history.slice(0, state.historyIndex + 1);
       state.history.push({ type: 'DELETE_SHAPES', shapes: deletedShapes });
       state.historyIndex += 1;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
     setGridVisible: (state, action) => {
-      state.isGridVisible = action.payload;
-      // Add to history
+      const newValue = typeof action.payload === 'boolean' ? action.payload : !state.isGridVisible;
+      state.isGridVisible = newValue;
+      // Add to history with proper type
       state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push({ 
-        type: 'SET_GRID_VISIBLE', 
-        value: action.payload,
-        previousValue: !action.payload 
+      state.history.push({
+        type: 'grid',
+        action: 'update',
+        previousState: !newValue,
+        newState: newValue
       });
-      state.historyIndex += 1;
+      state.historyIndex++;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
 
     // Selection actions
@@ -94,6 +140,9 @@ const canvasSlice = createSlice({
     // Tool actions
     setTool: (state, action) => {
       state.tool = action.payload;
+      if (action.payload === 'markdown') {
+        state.isMarkdownEditorVisible = true;
+      }
     },
     setStrokeStyle: (state, action) => {
       state.strokeStyle = action.payload;
@@ -186,6 +235,8 @@ const canvasSlice = createSlice({
       state.history = state.history.slice(0, state.historyIndex + 1);
       state.history.push({ type: 'ADD_STICKY_NOTE', note: newNote });
       state.historyIndex += 1;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
 
     updateStickyNote: (state, action) => {
@@ -203,6 +254,8 @@ const canvasSlice = createSlice({
           previousState 
         });
         state.historyIndex += 1;
+        state.canUndo = state.historyIndex > 0;
+        state.canRedo = false;
       }
     },
 
@@ -214,6 +267,8 @@ const canvasSlice = createSlice({
         state.history = state.history.slice(0, state.historyIndex + 1);
         state.history.push({ type: 'DELETE_STICKY_NOTE', note });
         state.historyIndex += 1;
+        state.canUndo = state.historyIndex > 0;
+        state.canRedo = false;
       }
     },
 
@@ -233,6 +288,8 @@ const canvasSlice = createSlice({
         newContent: action.payload,
       });
       state.historyIndex = state.history.length - 1;
+      state.canUndo = state.historyIndex > 0;
+      state.canRedo = false;
     },
 
     // Collaboration
@@ -293,6 +350,10 @@ const canvasSlice = createSlice({
         state.historyIndex--;
 
         switch (action.type) {
+          case 'UPDATE_CANVAS':
+            state.shapes = action.shapes;
+            state.stickyNotes = action.stickyNotes;
+            break;
           case 'shape':
             if (action.action === 'add') {
               state.shapes = state.shapes.filter((shape) => shape.id !== action.shapeId);
@@ -324,6 +385,8 @@ const canvasSlice = createSlice({
             state.isGridVisible = action.previousState;
             break;
         }
+        state.canUndo = state.historyIndex > 0;
+        state.canRedo = true;
       }
     },
     redo: (state) => {
@@ -332,6 +395,10 @@ const canvasSlice = createSlice({
         const action = state.history[state.historyIndex];
 
         switch (action.type) {
+          case 'UPDATE_CANVAS':
+            state.shapes = action.shapes;
+            state.stickyNotes = action.stickyNotes;
+            break;
           case 'shape':
             if (action.action === 'add') {
               state.shapes.push(action.shape);
@@ -363,6 +430,8 @@ const canvasSlice = createSlice({
             state.isGridVisible = action.newState;
             break;
         }
+        state.canUndo = true;
+        state.canRedo = state.historyIndex < state.history.length - 1;
       }
     },
     setTextAlign: (state, action) => {
@@ -383,8 +452,9 @@ export const {
   setFillColor,
   setFontSize,
   setTextAlign,
-  setGridSnap,
   setGridVisible,
+  setGridSnap,
+  setGridSize,
   setZoom,
   undo,
   redo,
