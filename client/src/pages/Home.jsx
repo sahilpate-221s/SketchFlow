@@ -62,7 +62,7 @@ const Home = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-matte-black">
         <div className="absolute top-4 right-4">
-          <ThemeToggle />
+          {/* <ThemeToggle /> */}
         </div>
         <div className="text-red-500 dark:text-red-400 text-lg mb-4">{error.message}</div>
         <button
@@ -87,7 +87,7 @@ const Home = () => {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            <ThemeToggle />
+            {/* <ThemeToggle /> */}
             <button
               onClick={handleCreateDiagram}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 flex items-center space-x-2 shadow-sm shadow-blue-500/20"

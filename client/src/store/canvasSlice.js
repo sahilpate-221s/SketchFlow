@@ -16,8 +16,8 @@ const initialState = {
   fontFamily: 'Handlee',
   gridSize: 20,
   zoom: 1,
-  isGridSnap: false,
-  isGridVisible: false,
+  isGridSnap: true,
+  isGridVisible: true,
   textAlign: 'left',
   stickyNotes: [],
   markdownContent: '',
@@ -26,7 +26,7 @@ const initialState = {
   selectedShape: null,
   isDragging: false,
   isPanning: false,
-  lastMousePosition: { x: 0, y: 0 },
+  lastMousePosition: null,
   canUndo: false,
   canRedo: false,
 };
@@ -87,49 +87,75 @@ const canvasSlice = createSlice({
       }
 
       state.shapes.push(newShape);
+      
+      // Add to history
       state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push([...state.shapes]);
-      state.historyIndex++;
-      state.canUndo = state.historyIndex > 0;
+      state.history.push({
+        type: 'ADD_SHAPE',
+        shape: newShape,
+        timestamp: Date.now(),
+      });
+      state.historyIndex = state.history.length - 1;
+      state.canUndo = true;
       state.canRedo = false;
     },
     updateShape: (state, action) => {
       const updatedShape = action.payload;
       const index = state.shapes.findIndex(s => s.id === updatedShape.id);
       if (index !== -1) {
+        const oldShape = state.shapes[index];
         state.shapes[index] = updatedShape;
+        
+        // Add to history
         state.history = state.history.slice(0, state.historyIndex + 1);
-        state.history.push([...state.shapes]);
-        state.historyIndex++;
-        state.canUndo = state.historyIndex > 0;
+        state.history.push({
+          type: 'UPDATE_SHAPE',
+          oldShape,
+          newShape: updatedShape,
+          timestamp: Date.now(),
+        });
+        state.historyIndex = state.history.length - 1;
+        state.canUndo = true;
         state.canRedo = false;
       }
     },
     deleteShapes: (state, action) => {
-      const ids = action.payload;
-      const deletedShapes = state.shapes.filter(s => ids.includes(s.id));
-      state.shapes = state.shapes.filter(s => !ids.includes(s.id));
-      state.selectedIds = state.selectedIds.filter(id => !ids.includes(id));
+      const idsToDelete = action.payload;
+      const deletedShapes = state.shapes.filter(s => idsToDelete.includes(s.id));
+      state.shapes = state.shapes.filter(s => !idsToDelete.includes(s.id));
+      
+      // Add to history
       state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push({ type: 'DELETE_SHAPES', shapes: deletedShapes });
-      state.historyIndex += 1;
-      state.canUndo = state.historyIndex > 0;
+      state.history.push({
+        type: 'DELETE_SHAPES',
+        shapes: deletedShapes,
+        timestamp: Date.now(),
+      });
+      state.historyIndex = state.history.length - 1;
+      state.canUndo = true;
       state.canRedo = false;
     },
     setGridVisible: (state, action) => {
+      // Ensure we always have a boolean value
       const newValue = typeof action.payload === 'boolean' ? action.payload : !state.isGridVisible;
-      state.isGridVisible = newValue;
-      // Add to history with proper type
-      state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push({
-        type: 'grid',
-        action: 'update',
-        previousState: !newValue,
-        newState: newValue
-      });
-      state.historyIndex++;
-      state.canUndo = state.historyIndex > 0;
-      state.canRedo = false;
+      
+      // Only update if the value is actually changing
+      if (state.isGridVisible !== newValue) {
+        state.isGridVisible = newValue;
+        
+        // Add to history with proper type and state
+        state.history = state.history.slice(0, state.historyIndex + 1);
+        state.history.push({
+          type: 'grid',
+          action: 'update',
+          previousState: !newValue,
+          newState: newValue,
+          timestamp: Date.now()
+        });
+        state.historyIndex++;
+        state.canUndo = state.historyIndex > 0;
+        state.canRedo = false;
+      }
     },
 
     // Selection actions
@@ -345,47 +371,26 @@ const canvasSlice = createSlice({
 
     // Undo/Redo actions
     undo: (state) => {
-      if (state.historyIndex > 0) {
+      if (state.historyIndex >= 0) {
         const action = state.history[state.historyIndex];
-        state.historyIndex--;
-
+        
         switch (action.type) {
-          case 'UPDATE_CANVAS':
-            state.shapes = action.shapes;
-            state.stickyNotes = action.stickyNotes;
+          case 'ADD_SHAPE':
+            state.shapes = state.shapes.filter(s => s.id !== action.shape.id);
             break;
-          case 'shape':
-            if (action.action === 'add') {
-              state.shapes = state.shapes.filter((shape) => shape.id !== action.shapeId);
-            } else if (action.action === 'update') {
-              const shapeIndex = state.shapes.findIndex((shape) => shape.id === action.shapeId);
-              if (shapeIndex !== -1) {
-                state.shapes[shapeIndex] = action.previousState;
-              }
-            } else if (action.action === 'delete') {
-              state.shapes.push(action.shape);
+          case 'UPDATE_SHAPE':
+            const updateIndex = state.shapes.findIndex(s => s.id === action.newShape.id);
+            if (updateIndex !== -1) {
+              state.shapes[updateIndex] = action.oldShape;
             }
             break;
-          case 'stickyNote':
-            if (action.action === 'add') {
-              state.stickyNotes = state.stickyNotes.filter((note) => note.id !== action.noteId);
-            } else if (action.action === 'update') {
-              const noteIndex = state.stickyNotes.findIndex((note) => note.id === action.noteId);
-              if (noteIndex !== -1) {
-                state.stickyNotes[noteIndex] = action.previousState;
-              }
-            } else if (action.action === 'delete') {
-              state.stickyNotes.push(action.note);
-            }
-            break;
-          case 'markdown':
-            state.markdownContent = action.previousContent;
-            break;
-          case 'grid':
-            state.isGridVisible = action.previousState;
+          case 'DELETE_SHAPES':
+            state.shapes = [...state.shapes, ...action.shapes];
             break;
         }
-        state.canUndo = state.historyIndex > 0;
+        
+        state.historyIndex--;
+        state.canUndo = state.historyIndex >= 0;
         state.canRedo = true;
       }
     },
@@ -393,43 +398,22 @@ const canvasSlice = createSlice({
       if (state.historyIndex < state.history.length - 1) {
         state.historyIndex++;
         const action = state.history[state.historyIndex];
-
+        
         switch (action.type) {
-          case 'UPDATE_CANVAS':
-            state.shapes = action.shapes;
-            state.stickyNotes = action.stickyNotes;
+          case 'ADD_SHAPE':
+            state.shapes.push(action.shape);
             break;
-          case 'shape':
-            if (action.action === 'add') {
-              state.shapes.push(action.shape);
-            } else if (action.action === 'update') {
-              const shapeIndex = state.shapes.findIndex((shape) => shape.id === action.shapeId);
-              if (shapeIndex !== -1) {
-                state.shapes[shapeIndex] = action.newState;
-              }
-            } else if (action.action === 'delete') {
-              state.shapes = state.shapes.filter((shape) => shape.id !== action.shapeId);
+          case 'UPDATE_SHAPE':
+            const updateIndex = state.shapes.findIndex(s => s.id === action.newShape.id);
+            if (updateIndex !== -1) {
+              state.shapes[updateIndex] = action.newShape;
             }
             break;
-          case 'stickyNote':
-            if (action.action === 'add') {
-              state.stickyNotes.push(action.note);
-            } else if (action.action === 'update') {
-              const noteIndex = state.stickyNotes.findIndex((note) => note.id === action.noteId);
-              if (noteIndex !== -1) {
-                state.stickyNotes[noteIndex] = action.newState;
-              }
-            } else if (action.action === 'delete') {
-              state.stickyNotes = state.stickyNotes.filter((note) => note.id !== action.noteId);
-            }
-            break;
-          case 'markdown':
-            state.markdownContent = action.newContent;
-            break;
-          case 'grid':
-            state.isGridVisible = action.newState;
+          case 'DELETE_SHAPES':
+            state.shapes = state.shapes.filter(s => !action.shapes.some(ds => ds.id === s.id));
             break;
         }
+        
         state.canUndo = true;
         state.canRedo = state.historyIndex < state.history.length - 1;
       }

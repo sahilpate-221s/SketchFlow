@@ -13,8 +13,8 @@ const StickyNotes = () => {
       type: 'sticky',
       x: window.innerWidth / 2 - 100, // Center of the visible canvas
       y: window.innerHeight / 2 - 75,
-      width: 200,
-      height: 150,
+      width: 0, // Start with 0 width
+      height: 0, // Start with 0 height
       fill: '#fef08a',
       stroke: '#000000',
       strokeWidth: 1,

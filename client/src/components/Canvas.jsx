@@ -91,7 +91,18 @@ const Canvas = ({ readOnly = false }) => {
     isPanning,
     lastMousePosition,
     collaborators,
+    canUndo,
+    canRedo,
   } = useSelector((state) => state.canvas);
+
+  // Add grid rendering constants
+  const GRID_SIZE = 20; // Size of each grid cell
+  const GRID_EXTENSION = 2000; // How far to extend the grid beyond the visible area
+
+  // Add effect to handle undo/redo state changes - moved after state destructuring
+  useEffect(() => {
+    console.log('Undo/Redo state:', { canUndo, canRedo });
+  }, [canUndo, canRedo]);
 
   // Initialize socket events
   useEffect(() => {
@@ -228,6 +239,10 @@ const Canvas = ({ readOnly = false }) => {
     const stage = e.target.getStage();
     const point = stage.getPointerPosition();
     
+    if (isDrawing && currentShape) {
+      console.log('Updating shape during drag:', { tool, currentShape });
+    }
+
     // Throttle cursor updates
     const now = Date.now();
     if (lastCursorUpdateRef.current['self'] && now - lastCursorUpdateRef.current['self'] < 16) { // 60fps
@@ -309,34 +324,11 @@ const Canvas = ({ readOnly = false }) => {
       }
       case 'line':
       case 'arrow': {
-        // Add smoothing for lines and arrows
-        if (LINE_SMOOTHING) {
-          const dx = pointToUse.x - startPoint.x;
-          const dy = pointToUse.y - startPoint.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          // Add intermediate points for smoother lines
-          const numPoints = Math.max(2, Math.floor(distance / 10));
-          const points = [];
-          
-          for (let i = 0; i <= numPoints; i++) {
-            const t = i / numPoints;
-            points.push(
-              startPoint.x + dx * t,
-              startPoint.y + dy * t
-            );
-          }
-          
-          updatedShape = {
-            ...currentShape,
-            points,
-          };
-        } else {
-          updatedShape = {
-            ...currentShape,
-            points: [startPoint.x, startPoint.y, pointToUse.x, pointToUse.y],
-          };
-        }
+        // Simplified line/arrow drawing - just use start and end points
+        updatedShape = {
+          ...currentShape,
+          points: [startPoint.x, startPoint.y, pointToUse.x, pointToUse.y],
+        };
         break;
       }
       case 'freehand': {
@@ -350,22 +342,18 @@ const Canvas = ({ readOnly = false }) => {
         );
         
         if (distance >= MIN_DISTANCE) {
-          // Apply smoothing to new points
           const smoothedPoints = [...points];
           if (points.length >= 4) {
             const prevPoint = points.slice(-4, -2);
             const smoothedX = lastPoint[0] + (pointToUse.x - lastPoint[0]) * SMOOTHING_FACTOR;
             const smoothedY = lastPoint[1] + (pointToUse.y - lastPoint[1]) * SMOOTHING_FACTOR;
             
-            // Update last point with smoothed position
             smoothedPoints[smoothedPoints.length - 2] = smoothedX;
             smoothedPoints[smoothedPoints.length - 1] = smoothedY;
           }
           
-          // Add new point
           smoothedPoints.push(pointToUse.x, pointToUse.y);
           
-          // Reduce points if too many
           if (smoothedPoints.length > 6) {
             const reducedPoints = reducePoints(smoothedPoints, POINT_THRESHOLD);
             updatedShape = {
@@ -378,8 +366,6 @@ const Canvas = ({ readOnly = false }) => {
               points: smoothedPoints,
             };
           }
-          
-          setCurrentShape(updatedShape);
         } else {
           return;
         }
@@ -389,8 +375,11 @@ const Canvas = ({ readOnly = false }) => {
         return;
     }
 
-    dispatch(updateShape(updatedShape));
-    emitShapeUpdate(diagramId, updatedShape);
+    if (updatedShape) {
+      setCurrentShape(updatedShape);
+      dispatch(updateShape(updatedShape));
+      emitShapeUpdate(diagramId, updatedShape);
+    }
   }, [socket, diagramId, readOnly, isPanning, lastMousePosition, isDrawing, currentShape, tool, startPoint, dispatch, emitCursorMove, emitViewUpdate, emitShapeUpdate, selectedIds, zoom]);
 
   // Add this helper function for point reduction
@@ -453,7 +442,7 @@ const Canvas = ({ readOnly = false }) => {
     };
   }, [isSpacePressed, isPanning, readOnly]);
 
-  // Update handleMouseUp to deselect shapes and reset state
+  // Update handleMouseUp to auto-select select tool after shape creation
   const handleMouseUp = (e) => {
     if (readOnly) return;
 
@@ -467,22 +456,85 @@ const Canvas = ({ readOnly = false }) => {
 
     if (isDrawing) {
       if (currentShape) {
-        dispatch(updateShape(currentShape));
-        emitShapeUpdate(diagramId, currentShape);
+        // For line and arrow tools, ensure we have valid points
+        if (currentShape.type === 'line' || currentShape.type === 'arrow') {
+          const points = currentShape.points;
+          // Only create the shape if we have moved enough distance
+          const dx = points[2] - points[0];
+          const dy = points[3] - points[1];
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 5) { // Minimum distance threshold
+            dispatch(updateShape(currentShape));
+            emitShapeUpdate(diagramId, currentShape);
+            // Select the newly created shape
+            dispatch(setSelectedIds([currentShape.id]));
+          } else {
+            // If the line is too short, remove it
+            dispatch(deleteShapes([currentShape.id]));
+            emitShapeDelete(diagramId, [currentShape.id]);
+          }
+        } else {
+          // For other shapes, update as normal
+          dispatch(updateShape(currentShape));
+          emitShapeUpdate(diagramId, currentShape);
+          // Select the newly created shape
+          dispatch(setSelectedIds([currentShape.id]));
+        }
       }
-      // Deselect the shape after creation or moving
-      dispatch(setSelectedIds([]));
       setIsDrawing(false);
       setCurrentShape(null);
+      
+      // Auto-select the select tool after shape creation
+      dispatch(setTool('select'));
     }
   };
 
-  // Update handleMouseDown to fix shape creation
+  // Update handleMouseDown to only handle markdown panel
   const handleMouseDown = (e) => {
-    if (readOnly) return;
+    console.log('MouseDown event:', { tool, isDrawing, readOnly });
+    
+    if (readOnly) {
+      console.log('Canvas is in read-only mode');
+      return;
+    }
+
+    // Stop event propagation to prevent unwanted behavior
+    e.cancelBubble = true;
+    e.evt.preventDefault();
 
     const stage = e.target.getStage();
+    if (!stage) {
+      console.log('No stage found');
+      return;
+    }
+
     const point = stage.getPointerPosition();
+    if (!point) {
+      console.log('No pointer position found');
+      return;
+    }
+
+    // Handle markdown tool separately - just open the panel
+    if (tool === 'markdown') {
+      setIsMarkdownPanelOpen(true);
+      dispatch(setTool('select')); // Switch back to select tool after opening panel
+      return;
+    }
+
+    // Handle eraser tool first
+    if (tool === 'eraser') {
+      const clickedShape = e.target;
+      if (clickedShape !== stage) {
+        const shapeId = clickedShape.id();
+        if (shapeId) {
+          console.log('Erasing shape:', shapeId);
+          dispatch(deleteShapes([shapeId]));
+          emitShapeDelete(diagramId, [shapeId]);
+        }
+      }
+      return;
+    }
     
     // Convert point to stage coordinates considering zoom and pan
     const stagePoint = {
@@ -490,23 +542,26 @@ const Canvas = ({ readOnly = false }) => {
       y: (point.y - stage.y()) / stage.scaleY()
     };
 
+    console.log('Stage point:', stagePoint);
+
     // For freehand, use exact mouse position without snapping
     const pointToUse = tool === 'freehand' ? stagePoint : {
       x: snapToGrid(stagePoint.x),
       y: snapToGrid(stagePoint.y),
     };
 
-    // If already drawing, don't start a new shape
-    if (isDrawing) return;
-
+    // Handle panning first
     if (isSpacePressed || tool === 'pan') {
+      console.log('Starting pan');
       dispatch(setIsPanning(true));
       dispatch(setLastMousePosition(point));
       stage.container().style.cursor = 'grabbing';
       return;
     }
 
+    // Handle selection
     if (tool === 'select') {
+      console.log('Handling selection');
       const clickedOnEmpty = e.target === e.target.getStage();
       if (clickedOnEmpty) {
         dispatch(setSelectedIds([]));
@@ -514,7 +569,14 @@ const Canvas = ({ readOnly = false }) => {
       return;
     }
 
+    // If we're already drawing, don't start a new shape
+    if (isDrawing) {
+      console.log('Already drawing, ignoring mousedown');
+      return;
+    }
+
     // Start drawing new shape
+    console.log('Starting to draw new shape with tool:', tool);
     setIsDrawing(true);
     setStartPoint(pointToUse);
 
@@ -533,14 +595,16 @@ const Canvas = ({ readOnly = false }) => {
       rotation: 0,
     };
 
-    // Add tool-specific properties
+    console.log('Created new shape:', newShape);
+
+    // Add tool-specific properties with initial minimal size
     switch (tool) {
       case 'rectangle':
-        newShape.width = 100;
-        newShape.height = 100;
+        newShape.width = 0;
+        newShape.height = 0;
         break;
       case 'circle':
-        newShape.radius = 50;
+        newShape.radius = 0;
         break;
       case 'line':
       case 'arrow':
@@ -550,29 +614,40 @@ const Canvas = ({ readOnly = false }) => {
         newShape.points = [pointToUse.x, pointToUse.y];
         break;
       case 'text':
-        newShape.width = 200;
-        newShape.height = 50;
+        newShape.width = 0;
+        newShape.height = 0;
         newShape.text = '';
         break;
       case 'sticky':
-        newShape.width = 200;
-        newShape.height = 150;
+        newShape.width = 0;
+        newShape.height = 0;
         newShape.text = 'Double click to edit...';
         break;
       case 'markdown':
-        newShape.width = 300;
-        newShape.height = 200;
+        newShape.width = 0;
+        newShape.height = 0;
         newShape.text = '';
         break;
+      default:
+        console.log('Invalid tool:', tool);
+        dispatch(setTool('select'));
+        setIsDrawing(false);
+        return;
     }
 
-    setCurrentShape(newShape);
-    dispatch(addShape(newShape));
-    emitShapeAdd(diagramId, newShape);
+    // Only proceed if we have a valid drawing tool
+    if (['rectangle', 'circle', 'line', 'arrow', 'freehand', 'text', 'sticky', 'markdown'].includes(tool)) {
+      console.log('Adding shape to canvas');
+      setCurrentShape(newShape);
+      dispatch(addShape(newShape));
+      emitShapeAdd(diagramId, newShape);
 
-    // Handle text-based tools
-    if (tool === 'text' || tool === 'sticky' || tool === 'markdown') {
-      handleTextEdit(newShape.id, newShape.text || '', pointToUse);
+      // Handle text-based tools
+      if (tool === 'text' || tool === 'sticky' || tool === 'markdown') {
+        handleTextEdit(newShape.id, newShape.text || '', pointToUse);
+      }
+    } else {
+      console.log('Invalid drawing tool:', tool);
     }
   };
 
@@ -584,13 +659,15 @@ const Canvas = ({ readOnly = false }) => {
       // Undo (Ctrl+Z)
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
+        console.log('Undoing last action');
         dispatch(undo());
         return;
       }
 
-      // Redo (Ctrl+Y)
-      if (e.ctrlKey && e.key === 'y') {
+      // Redo (Ctrl+Y or Ctrl+Shift+Z)
+      if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
         e.preventDefault();
+        console.log('Redoing last action');
         dispatch(redo());
         return;
       }
@@ -706,28 +783,113 @@ const Canvas = ({ readOnly = false }) => {
     emitViewUpdate(diagramId, { zoom: newScale, position: newPos });
   };
 
-  // Add this function to handle text editing
+  // Update handleTextEdit to properly handle sticky notes
   const handleTextEdit = (shapeId, text, position) => {
     if (readOnly) return;
     const stage = stageRef.current;
     if (!stage) return;
 
+    const shape = shapes.find(s => s.id === shapeId);
+    if (!shape) return;
+
     const absPos = stage.container().getBoundingClientRect();
     const scale = stage.scaleX();
     
     setEditingTextId(shapeId);
-    setEditingTextValue(text);
+    setEditingTextValue(text || '');
     
-    // Calculate position considering stage transform
+    // Calculate position considering stage transform and shape type
     const stagePoint = {
       x: (position.x - stage.x()) / scale,
       y: (position.y - stage.y()) / scale
     };
     
-    setEditingTextPos({
-      x: stagePoint.x + absPos.left,
-      y: stagePoint.y + absPos.top,
-    });
+    // For sticky notes, adjust the position to be inside the note
+    const textPos = {
+      x: stagePoint.x + absPos.left + (shape.type === 'sticky' ? 10 : 0),
+      y: stagePoint.y + absPos.top + (shape.type === 'sticky' ? 10 : 0),
+    };
+    
+    setEditingTextPos(textPos);
+
+    // If it's a sticky note, ensure it has a minimum size
+    if (shape.type === 'sticky' && (!shape.width || shape.width < 100)) {
+      const updatedShape = {
+        ...shape,
+        width: Math.max(shape.width || 0, 100),
+        height: Math.max(shape.height || 0, 100),
+      };
+      dispatch(updateShape(updatedShape));
+      emitShapeUpdate(diagramId, updatedShape);
+    }
+  };
+
+  // Add cleanup effect for text editor
+  useEffect(() => {
+    return () => {
+      // Cleanup text editor state when component unmounts
+      setEditingTextId(null);
+      setEditingTextValue('');
+    };
+  }, []);
+
+  // Update text editor portal
+  const renderTextEditor = () => {
+    if (!editingTextId || readOnly) return null;
+
+    const shape = shapes.find(s => s.id === editingTextId);
+    if (!shape) return null;
+
+    return (
+      <Portal>
+        <div
+          className="fixed z-[1000]"
+          style={{
+            position: 'absolute',
+            top: editingTextPos.y,
+            left: editingTextPos.x,
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          <div className="relative">
+            <textarea
+              value={editingTextValue}
+              onChange={(e) => setEditingTextValue(e.target.value)}
+              onBlur={() => {
+                if (editingTextId) {
+                  const shape = shapes.find(s => s.id === editingTextId);
+                  if (shape) {
+                    const updatedShape = {
+                      ...shape,
+                      text: editingTextValue,
+                    };
+                    dispatch(updateShape(updatedShape));
+                    emitShapeUpdate(diagramId, updatedShape);
+                  }
+                  setEditingTextId(null);
+                  setEditingTextValue('');
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.target.blur();
+                }
+              }}
+              className="border border-gray-300 rounded p-1 bg-white shadow-lg min-w-[100px] min-h-[24px] resize-none"
+              style={{
+                fontSize: `${shape.fontSize || 16}px`,
+                color: shape.stroke || '#000',
+                width: shape.type === 'sticky' ? `${shape.width - 20}px` : 'auto',
+                height: shape.type === 'sticky' ? `${shape.height - 20}px` : 'auto',
+              }}
+              autoFocus
+            />
+          </div>
+        </div>
+      </Portal>
+    );
   };
 
   // Add helper function to calculate distance from point to line segment
@@ -764,32 +926,35 @@ const Canvas = ({ readOnly = false }) => {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // Add markdown panel toggle handler
-  const toggleMarkdownPanel = () => {
-    setIsMarkdownPanelOpen(!isMarkdownPanelOpen);
-  };
-
-  // Update markdown handling
-  const handleMarkdownEdit = (shapeId, text, position) => {
-    if (readOnly) return;
-    setEditingMarkdownId(shapeId);
-    setEditingMarkdownValue(text || '');
-    setIsMarkdownPanelOpen(true);
-  };
-
-  // Handle markdown save
+  // Update handleMarkdownSave to only manage notes in the panel
   const handleMarkdownSave = () => {
-    if (!editingMarkdownId) return;
-    
-    const shape = shapes.find((s) => s.id === editingMarkdownId);
-    if (shape) {
-      const updatedShape = {
-        ...shape,
-        text: editingMarkdownValue,
+    if (!editingMarkdownValue.trim()) return;
+
+    const bulletPoints = editingMarkdownValue
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => line.startsWith('- ') ? line : `- ${line}`);
+
+    if (editingMarkdownId) {
+      // Update existing note
+      const updatedNote = {
+        id: editingMarkdownId,
+        type: 'markdown',
+        text: bulletPoints.join('\n'),
+        timestamp: Date.now(),
       };
-      dispatch(updateShape(updatedShape));
-      emitShapeUpdate(diagramId, updatedShape);
+      dispatch(updateShape(updatedNote));
+    } else {
+      // Create new note
+      const newNote = {
+        id: uuidv4(),
+        type: 'markdown',
+        text: bulletPoints.join('\n'),
+        timestamp: Date.now(),
+      };
+      dispatch(addShape(newNote));
     }
+    
     setEditingMarkdownId(null);
     setEditingMarkdownValue('');
   };
@@ -921,74 +1086,97 @@ const Canvas = ({ readOnly = false }) => {
     );
   };
 
-  // Add effect to ensure tool state is properly initialized
+  // Add effect to ensure tool state is properly initialized and maintained
   useEffect(() => {
     // Initialize tool state if not set
     if (!tool) {
+      console.log('Initializing tool state to select');
       dispatch(setTool('select'));
     }
 
-    // Reset tool state when component unmounts
-    return () => {
-      dispatch(setTool('select'));
-    };
+    // Log tool changes for debugging
+    console.log('Tool changed to:', tool);
+
+    // Update cursor based on tool
+    if (stageRef.current) {
+      const cursorMap = {
+        select: 'default',
+        rectangle: 'crosshair',
+        circle: 'crosshair',
+        line: 'crosshair',
+        arrow: 'crosshair',
+        freehand: 'crosshair',
+        text: 'text',
+        sticky: 'crosshair',
+        markdown: 'crosshair',
+        pan: 'grab',
+        eraser: 'crosshair'
+      };
+
+      const cursor = cursorMap[tool] || 'default';
+      console.log('Setting cursor to:', cursor);
+      stageRef.current.container().style.cursor = cursor;
+    }
   }, [dispatch, tool]);
 
   // Add effect to handle tool changes
   useEffect(() => {
-    if (!stageRef.current) return;
+    // Log tool changes for debugging
+    console.log('Current tool:', tool);
+  }, [tool]);
 
-    // Update cursor based on tool
-    const cursorMap = {
-      select: 'default',
-      rectangle: 'crosshair',
-      circle: 'crosshair',
-      line: 'crosshair',
-      arrow: 'crosshair',
-      freehand: 'crosshair',
-      text: 'text',
-      sticky: 'crosshair',
-      markdown: 'crosshair',
-      pan: 'grab',
-      eraser: 'crosshair'
+  // Update undo/redo functionality
+  useEffect(() => {
+    if (readOnly) return;
+
+    const handleKeyDown = (e) => {
+      // Undo (Ctrl+Z)
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        console.log('Undoing last action');
+        dispatch(undo());
+        return;
+      }
+
+      // Redo (Ctrl+Y or Ctrl+Shift+Z)
+      if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+        e.preventDefault();
+        console.log('Redoing last action');
+        dispatch(redo());
+        return;
+      }
     };
 
-    stageRef.current.container().style.cursor = cursorMap[tool] || 'default';
-  }, [tool]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dispatch, readOnly]);
 
   return (
     <div className="relative w-full h-full bg-white">
       {/* Dashboard Button */}
-      <button
-        onClick={() => navigate('/dashboard')}
-        className="fixed top-4 left-4 z-50 flex items-center px-4 py-2 bg-white rounded-lg shadow-lg hover:bg-gray-100"
-      >
-        <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-        <span className="text-gray-700">Dashboard</span>
-      </button>
+      {/* Removed from top left */}
 
-      {/* Markdown Editor Panel */}
+      {/* Markdown Notes Panel */}
       <div
         ref={markdownPanelRef}
-        className={`fixed left-0 top-0 h-full bg-white shadow-lg transition-transform duration-300 ease-in-out z-50 ${
+        className={`fixed left-0 top-0 h-full bg-white shadow-xl transition-transform duration-300 ease-in-out z-50 ${
           isMarkdownPanelOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ width: '400px' }}
+        style={{ width: '300px' }}
       >
         <div className="flex flex-col h-full">
           {/* Panel Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between p-3 border-b border-gray-200/90 bg-white/95">
             <h2 className="text-lg font-semibold text-gray-900">
-              Markdown Editor
+              Quick Notes
             </h2>
             <button
               onClick={() => {
                 setIsMarkdownPanelOpen(false);
                 setEditingMarkdownId(null);
+                setEditingMarkdownValue('');
               }}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+              className="p-2 rounded-lg hover:bg-gray-100/90 text-gray-600"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -997,41 +1185,121 @@ const Canvas = ({ readOnly = false }) => {
           </div>
 
           {/* Editor Content */}
-          <div className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
-            {/* Editor */}
-            <div className="flex-1 flex flex-col">
+          <div className="flex flex-col h-full bg-white/95">
+            {/* Quick Input */}
+            <div className="p-3 border-b border-gray-200/90">
               <textarea
                 value={editingMarkdownValue}
                 onChange={(e) => setEditingMarkdownValue(e.target.value)}
-                className="flex-1 w-full p-3 rounded-lg border border-gray-200 text-gray-900 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Write your markdown here..."
+                className="w-full p-2 rounded-lg border border-gray-200/90 text-black resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/95"
+                placeholder="Type your note here... (Press Enter for new bullet point)"
+                rows={3}
+                onKeyDown={(e) => {
+                  // Only handle Enter and Tab keys, let all other keys work normally
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const currentValue = e.target.value;
+                    const cursorPosition = e.target.selectionStart;
+                    const textBeforeCursor = currentValue.substring(0, cursorPosition);
+                    const textAfterCursor = currentValue.substring(cursorPosition);
+                    
+                    // Check if we're at the start of a line or after a bullet point
+                    const isAtStartOfLine = textBeforeCursor.endsWith('\n') || textBeforeCursor === '';
+                    const isAfterBullet = textBeforeCursor.endsWith('- ');
+                    
+                    if (isAtStartOfLine || isAfterBullet) {
+                      setEditingMarkdownValue(textBeforeCursor + '- ' + textAfterCursor);
+                      // Set cursor position after the new bullet point
+                      setTimeout(() => {
+                        e.target.selectionStart = cursorPosition + 2;
+                        e.target.selectionEnd = cursorPosition + 2;
+                      }, 0);
+                    } else {
+                      setEditingMarkdownValue(textBeforeCursor + '\n- ' + textAfterCursor);
+                      // Set cursor position after the new bullet point
+                      setTimeout(() => {
+                        e.target.selectionStart = cursorPosition + 3;
+                        e.target.selectionEnd = cursorPosition + 3;
+                      }, 0);
+                    }
+                  } else if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const currentValue = e.target.value;
+                    const cursorPosition = e.target.selectionStart;
+                    const textBeforeCursor = currentValue.substring(0, cursorPosition);
+                    const textAfterCursor = currentValue.substring(cursorPosition);
+                    
+                    setEditingMarkdownValue(textBeforeCursor + '    ' + textAfterCursor);
+                    // Set cursor position after the tab
+                    setTimeout(() => {
+                      e.target.selectionStart = cursorPosition + 4;
+                      e.target.selectionEnd = cursorPosition + 4;
+                    }, 0);
+                  }
+                }}
               />
-            </div>
-
-            {/* Preview */}
-            <div className="flex-1 overflow-auto p-3 rounded-lg border border-gray-200">
-              <div className="prose max-w-none">
-                <ReactMarkdown>{editingMarkdownValue}</ReactMarkdown>
+              <div className="flex justify-end mt-2 space-x-2">
+                <button
+                  onClick={() => {
+                    setEditingMarkdownId(null);
+                    setEditingMarkdownValue('');
+                  }}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-gray-100/95 text-gray-700 hover:bg-gray-200/95"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={handleMarkdownSave}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-blue-600/95 text-white hover:bg-blue-700/95"
+                >
+                  {editingMarkdownId ? 'Update Note' : 'Add Note'}
+                </button>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-2 pt-2">
-              <button
-                onClick={() => {
-                  setIsMarkdownPanelOpen(false);
-                  setEditingMarkdownId(null);
-                }}
-                className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleMarkdownSave}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Save
-              </button>
+            {/* Notes List */}
+            <div className="flex-1 overflow-auto p-3">
+              {shapes
+                .filter(shape => shape.type === 'markdown')
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .map(note => (
+                  <div
+                    key={note.id}
+                    className="mb-3 p-3 rounded-lg border border-gray-200/90 bg-white/95 hover:bg-gray-50/95 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="text-sm text-gray-500">
+                        {new Date(note.timestamp || Date.now()).toLocaleTimeString()}
+                      </div>
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => {
+                            setEditingMarkdownId(note.id);
+                            setEditingMarkdownValue(note.text);
+                          }}
+                          className="p-1 rounded hover:bg-gray-100/95 text-gray-500 hover:text-blue-500"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            dispatch(deleteShapes([note.id]));
+                          }}
+                          className="p-1 rounded hover:bg-gray-100/95 text-gray-500 hover:text-red-500"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="prose prose-sm max-w-none text-black">
+                      <ReactMarkdown>{note.text}</ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -1039,7 +1307,7 @@ const Canvas = ({ readOnly = false }) => {
 
       {/* Canvas Container */}
       <div className={`absolute inset-0 transition-all duration-300 ${
-        isMarkdownPanelOpen ? 'left-[400px]' : 'left-0'
+        isMarkdownPanelOpen ? 'left-[300px]' : 'left-0'
       }`}>
         <Stage
           ref={stageRef}
@@ -1052,47 +1320,91 @@ const Canvas = ({ readOnly = false }) => {
           draggable={isPanning}
           className="bg-white"
         >
-          {/* Grid Layer - More subtle grid */}
+          {/* Grid Layer - Infinite grid */}
           {isGridVisible && (
             <Layer>
-              {Array.from({ length: Math.ceil(stageWidth / gridSize) + 1 }).map((_, i) => (
-                <Line
-                  key={`v${i}`}
-                  points={[i * gridSize, 0, i * gridSize, stageHeight]}
-                  stroke="#e5e7eb"
-                  strokeWidth={0.5}
-                  opacity={0.3}
-                  dash={[5, 5]} // Make grid lines dashed
-                />
-              ))}
-              {Array.from({ length: Math.ceil(stageHeight / gridSize) + 1 }).map((_, i) => (
-                <Line
-                  key={`h${i}`}
-                  points={[0, i * gridSize, stageWidth, i * gridSize]}
-                  stroke="#e5e7eb"
-                  strokeWidth={0.5}
-                  opacity={0.3}
-                  dash={[5, 5]} // Make grid lines dashed
-                />
-              ))}
+              {/* Calculate grid lines based on stage position and zoom */}
+              {(() => {
+                const stage = stageRef.current;
+                if (!stage) return null;
+
+                const stagePos = stage.position();
+                const scale = stage.scaleX();
+                
+                // Calculate visible area with extension
+                const startX = Math.floor((stagePos.x / scale - GRID_EXTENSION) / GRID_SIZE) * GRID_SIZE;
+                const endX = Math.ceil((stagePos.x / scale + stageWidth / scale + GRID_EXTENSION) / GRID_SIZE) * GRID_SIZE;
+                const startY = Math.floor((stagePos.y / scale - GRID_EXTENSION) / GRID_SIZE) * GRID_SIZE;
+                const endY = Math.ceil((stagePos.y / scale + stageHeight / scale + GRID_EXTENSION) / GRID_SIZE) * GRID_SIZE;
+
+                const lines = [];
+                
+                // Vertical lines
+                for (let x = startX; x <= endX; x += GRID_SIZE) {
+                  lines.push(
+                    <Line
+                      key={`v${x}`}
+                      points={[x, startY, x, endY]}
+                      stroke="#64748b"
+                      strokeWidth={0.5}
+                      opacity={0.7}
+                      dash={[5, 5]}
+                    />
+                  );
+                }
+                
+                // Horizontal lines
+                for (let y = startY; y <= endY; y += GRID_SIZE) {
+                  lines.push(
+                    <Line
+                      key={`h${y}`}
+                      points={[startX, y, endX, y]}
+                      stroke="#64748b"
+                      strokeWidth={0.5}
+                      opacity={0.7}
+                      dash={[5, 5]}
+                    />
+                  );
+                }
+                
+                return lines;
+              })()}
             </Layer>
           )}
 
           {/* Shapes Layer */}
           <Layer>
             {shapes.map((shape) => {
+              if (shape.type === 'markdown') return null; // Skip rendering markdown shapes
               const commonProps = {
                 id: shape.id,
-                draggable: !readOnly && tool === 'select', // Only draggable in select mode
+                draggable: !readOnly && tool === 'select',
                 onClick: (e) => {
                   if (readOnly) return;
+                  
+                  // Stop event propagation to prevent stage click
+                  e.cancelBubble = true;
+                  
                   if (tool === 'select') {
-                    e.cancelBubble = true;
                     if (e.evt.shiftKey) {
                       // Add to selection if shift is pressed
                       dispatch(setSelectedIds([...selectedIds, shape.id]));
                     } else {
                       // Select single shape
+                      dispatch(setSelectedIds([shape.id]));
+                    }
+                  }
+                },
+                onTap: (e) => {
+                  if (readOnly) return;
+                  
+                  // Stop event propagation
+                  e.cancelBubble = true;
+                  
+                  if (tool === 'select') {
+                    if (e.evt.shiftKey) {
+                      dispatch(setSelectedIds([...selectedIds, shape.id]));
+                    } else {
                       dispatch(setSelectedIds([shape.id]));
                     }
                   }
@@ -1126,9 +1438,12 @@ const Canvas = ({ readOnly = false }) => {
                       width={shape.width}
                       height={shape.height}
                       fill={shape.fill}
-                      stroke={shape.stroke}
-                      strokeWidth={shape.strokeWidth}
+                      stroke={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                      strokeWidth={selectedIds.includes(shape.id) ? Math.max(shape.strokeWidth, 3) : shape.strokeWidth}
                       strokeStyle={shape.strokeStyle}
+                      shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : undefined}
+                      shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
+                      shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0}
                     />
                   );
                 case 'circle':
@@ -1140,9 +1455,12 @@ const Canvas = ({ readOnly = false }) => {
                       y={shape.y}
                       radius={shape.radius}
                       fill={shape.fill}
-                      stroke={shape.stroke}
-                      strokeWidth={shape.strokeWidth}
+                      stroke={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                      strokeWidth={selectedIds.includes(shape.id) ? Math.max(shape.strokeWidth, 3) : shape.strokeWidth}
                       strokeStyle={shape.strokeStyle}
+                      shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : undefined}
+                      shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
+                      shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0}
                     />
                   );
                 case 'line':
@@ -1152,12 +1470,15 @@ const Canvas = ({ readOnly = false }) => {
                       key={shape.id}
                       {...commonProps}
                       points={shape.points}
-                      fill={shape.stroke}
-                      stroke={shape.stroke}
-                      strokeWidth={shape.strokeWidth}
+                      fill={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                      stroke={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                      strokeWidth={selectedIds.includes(shape.id) ? Math.max(shape.strokeWidth, 3) : shape.strokeWidth}
                       strokeStyle={shape.strokeStyle}
                       pointerLength={shape.type === 'arrow' ? 10 : 0}
                       pointerWidth={shape.type === 'arrow' ? 10 : 0}
+                      shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : undefined}
+                      shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
+                      shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0}
                     />
                   );
                 case 'freehand':
@@ -1166,8 +1487,8 @@ const Canvas = ({ readOnly = false }) => {
                       key={shape.id}
                       {...commonProps}
                       points={shape.points}
-                      stroke={shape.stroke}
-                      strokeWidth={shape.strokeWidth}
+                      stroke={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                      strokeWidth={selectedIds.includes(shape.id) ? Math.max(shape.strokeWidth, 3) : shape.strokeWidth}
                       tension={0.5}
                       lineCap="round"
                       lineJoin="round"
@@ -1176,6 +1497,9 @@ const Canvas = ({ readOnly = false }) => {
                       hitStrokeWidth={20}
                       listening={!readOnly}
                       bezier={false} // Disable bezier curves for more accurate freehand drawing
+                      shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : undefined}
+                      shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
+                      shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0}
                     />
                   );
                 case 'text':
@@ -1187,28 +1511,58 @@ const Canvas = ({ readOnly = false }) => {
                       y={shape.y}
                       text={shape.text}
                       fontSize={shape.fontSize}
-                      fill={shape.stroke}
+                      fill={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
                       onDblClick={(e) => {
                         const node = e.target;
                         const pos = node.getAbsolutePosition();
                         handleTextEdit(shape.id, shape.text, pos);
                       }}
+                      shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : undefined}
+                      shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
+                      shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0}
                     />
                   );
                 case 'sticky':
                   return (
-                    <Group key={shape.id} {...commonProps} x={shape.x} y={shape.y}>
+                    <Group 
+                      key={shape.id} 
+                      {...commonProps} 
+                      x={shape.x} 
+                      y={shape.y}
+                      onClick={(e) => {
+                        if (readOnly) return;
+                        e.cancelBubble = true;
+                        if (tool === 'select') {
+                          if (e.evt.shiftKey) {
+                            dispatch(setSelectedIds([...selectedIds, shape.id]));
+                          } else {
+                            dispatch(setSelectedIds([shape.id]));
+                          }
+                        }
+                      }}
+                      onDblClick={(e) => {
+                        if (readOnly) return;
+                        e.cancelBubble = true;
+                        const node = e.target;
+                        const pos = node.getAbsolutePosition();
+                        // Ensure the shape exists and has text property
+                        const stickyShape = shapes.find(s => s.id === shape.id);
+                        if (stickyShape) {
+                          handleTextEdit(shape.id, stickyShape.text || '', pos);
+                        }
+                      }}
+                    >
                       <Rect
                         width={shape.width}
                         height={shape.height}
                         fill={shape.fill}
-                        stroke={shape.stroke}
-                        strokeWidth={shape.strokeWidth}
+                        stroke={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
+                        strokeWidth={selectedIds.includes(shape.id) ? Math.max(shape.strokeWidth, 3) : shape.strokeWidth}
                         cornerRadius={8}
-                        shadowColor="rgba(0,0,0,0.2)"
-                        shadowBlur={10}
+                        shadowColor={selectedIds.includes(shape.id) ? '#3b82f6' : 'rgba(0,0,0,0.2)'}
+                        shadowBlur={selectedIds.includes(shape.id) ? 10 : 0}
                         shadowOffset={{ x: 2, y: 2 }}
-                        shadowOpacity={0.3}
+                        shadowOpacity={selectedIds.includes(shape.id) ? 0.6 : 0.3}
                       />
                       <Text
                         text={shape.text || 'Double click to edit...'}
@@ -1217,18 +1571,13 @@ const Canvas = ({ readOnly = false }) => {
                         x={10}
                         y={10}
                         fontSize={shape.fontSize}
-                        fill={shape.stroke}
+                        fill={selectedIds.includes(shape.id) ? '#3b82f6' : shape.stroke}
                         padding={10}
                         align="left"
                         verticalAlign="top"
-                        onDblClick={(e) => {
-                          const node = e.target;
-                          const pos = node.getAbsolutePosition();
-                          handleTextEdit(shape.id, shape.text, pos);
-                        }}
                       />
                       {/* Resize handle */}
-                      {!readOnly && (
+                      {!readOnly && tool === 'select' && selectedIds.includes(shape.id) && (
                         <Rect
                           x={shape.width - 20}
                           y={shape.height - 20}
@@ -1244,38 +1593,6 @@ const Canvas = ({ readOnly = false }) => {
                           }}
                         />
                       )}
-                    </Group>
-                  );
-                case 'markdown':
-                  return (
-                    <Group key={shape.id} {...commonProps} x={shape.x} y={shape.y}>
-                      <Rect
-                        width={shape.width}
-                        height={shape.height}
-                        fill="#ffffff"
-                        stroke={shape.stroke}
-                        strokeWidth={shape.strokeWidth}
-                        cornerRadius={8}
-                        shadowColor="rgba(0,0,0,0.1)"
-                        shadowBlur={5}
-                        shadowOffset={{ x: 1, y: 1 }}
-                        shadowOpacity={0.2}
-                      />
-                      <Text
-                        text={shape.text}
-                        width={shape.width - 20}
-                        height={shape.height - 20}
-                        x={10}
-                        y={10}
-                        fontSize={shape.fontSize}
-                        fill={shape.stroke}
-                        padding={10}
-                        onDblClick={(e) => {
-                          const node = e.target;
-                          const pos = node.getAbsolutePosition();
-                          handleMarkdownEdit(shape.id, shape.text, pos);
-                        }}
-                      />
                     </Group>
                   );
                 default:
@@ -1328,56 +1645,24 @@ const Canvas = ({ readOnly = false }) => {
       </div>
 
       {/* Text Editor Portal */}
-      {editingTextId && !readOnly && (
-        <Portal>
-          <div
-            className="fixed z-[1000]"
-            style={{
-              position: 'absolute',
-              top: editingTextPos.y,
-              left: editingTextPos.x,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            <input
-              value={editingTextValue}
-              onChange={(e) => setEditingTextValue(e.target.value)}
-              onBlur={() => {
-                const shape = shapes.find((s) => s.id === editingTextId);
-                if (shape) {
-                  const updatedShape = {
-                    ...shape,
-                    text: editingTextValue,
-                  };
-                  dispatch(updateShape(updatedShape));
-                  emitShapeUpdate(diagramId, updatedShape);
-                }
-                setEditingTextId(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.target.blur();
-                }
-              }}
-              className="border-none p-0 m-0 bg-transparent outline-none font-inherit"
-              style={{
-                fontSize: `${shapes.find(s => s.id === editingTextId)?.fontSize || 16}px`,
-                color: shapes.find(s => s.id === editingTextId)?.stroke || '#000',
-              }}
-            />
-          </div>
-        </Portal>
-      )}
+      {renderTextEditor()}
 
       {/* Sticky Notes Panel */}
       <StickyNotes />
 
-      {/* Markdown Editor Panel */}
-      <MarkdownEditor />
-
-      {/* Collaborator Presence Panel */}
-      {renderCollaboratorPresence()}
+      <div className="fixed top-4 left-4 z-50 flex items-center space-x-4">
+        {renderCollaboratorPresence()}
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center p-2 bg-white rounded-lg shadow-lg hover:bg-gray-100"
+          aria-label="Home"
+          title="Home"
+        >
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 };

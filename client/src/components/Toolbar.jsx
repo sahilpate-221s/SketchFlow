@@ -112,9 +112,18 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    console.log('Toolbar - Current tool:', tool);
+  }, [tool]);
+
   const handleZoom = (delta) => {
     const newZoom = Math.max(0.1, Math.min(5, zoom + delta));
     dispatch(setZoom(newZoom));
+  };
+
+  const handleToolSelect = (toolId) => {
+    console.log('Toolbar - Selecting tool:', toolId);
+    dispatch(setTool(toolId));
   };
 
   return (
@@ -123,34 +132,27 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
       <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-500 ${
         isScrolled ? 'scale-95 opacity-95' : 'scale-100 opacity-100'
       }`}>
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-200/80 p-2.5 flex items-center space-x-3">
+        <div className="bg-white/98 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-200/90 p-2.5 flex items-center space-x-3">
           {/* Main Tools */}
           {TOOL_GROUPS.map((group) => (
-            <div key={group.name} className="relative">
-              <div className="flex items-center space-x-1.5 px-2">
-                {group.tools.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      dispatch(setTool(t.id));
-                      if (t.id === 'markdown') {
-                        dispatch({ type: 'canvas/toggleMarkdownEditor' });
-                      }
-                    }}
-                    className={`relative p-2.5 rounded-xl transition-all duration-300 group ${
-                      tool === t.id 
-                        ? 'bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-400/30' 
-                        : 'hover:bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    {t.icon}
-                    {/* Single tooltip that appears on hover */}
-                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg pointer-events-none z-50">
-                      {t.label} ({t.shortcut})
-                    </div>
-                  </button>
-                ))}
-              </div>
+            <div
+              key={group.name}
+              className="bg-white/95 dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200/80 dark:border-dark-border/80 p-2 space-y-1"
+            >
+              {group.tools.map((toolItem) => (
+                <button
+                  key={toolItem.id}
+                  onClick={() => handleToolSelect(toolItem.id)}
+                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-hover transition-colors ${
+                    tool === toolItem.id
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                      : 'text-gray-600 dark:text-gray-300'
+                  }`}
+                  title={`${toolItem.label} (${toolItem.shortcut})`}
+                >
+                  {toolItem.icon}
+                </button>
+              ))}
             </div>
           ))}
         </div>
@@ -158,7 +160,7 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
 
       {/* Bottom Toolbar - Combined controls centered */}
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-        <div className="bg-white/95 backdrop-blur-lg rounded-xl shadow-lg border border-gray-200/80 p-2 flex items-center space-x-4">
+        <div className="bg-white/98 backdrop-blur-lg rounded-xl shadow-lg border border-gray-200/90 p-2 flex items-center space-x-4">
           {/* Grid Toggle */}
           <button
             onClick={onGridToggle}

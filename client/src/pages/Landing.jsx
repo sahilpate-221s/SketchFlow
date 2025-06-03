@@ -127,7 +127,7 @@ const Landing = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
+              {/* <ThemeToggle /> */}
               <button
                 onClick={handleGuestAccess}
                 className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 px-4 py-2 rounded-lg transition-colors"

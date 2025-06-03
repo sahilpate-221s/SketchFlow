@@ -61,7 +61,10 @@ const Board = () => {
   // Check if user has edit access
   const hasEditAccess = useMemo(() => {
     if (!isAuthenticated || !diagram) return false;
-    return diagram.owner.toString() === user._id.toString() || diagram.collaborators.some(c => c.user.toString() === user._id.toString() && c.role === 'editor');
+    const ownerId = diagram.owner ? diagram.owner.toString() : null;
+    const userId = user?._id ? user._id.toString() : null;
+    if (!ownerId || !userId) return false;
+    return ownerId === userId || diagram.collaborators.some(c => c.user && c.user.toString() === userId && c.role === 'editor');
   }, [isAuthenticated, diagram, user]);
 
   // Handle diagram updates
@@ -273,7 +276,7 @@ const Board = () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-matte-black">
         <div className="absolute top-4 right-4">
-          <ThemeToggle />
+          {/* <ThemeToggle /> */}
         </div>
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 dark:border-blue-400" />
       </div>
@@ -284,7 +287,7 @@ const Board = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-matte-black">
         <div className="absolute top-4 right-4">
-          <ThemeToggle />
+          {/* <ThemeToggle /> */}
         </div>
         <div className="text-red-500 dark:text-red-400 text-lg mb-4">
           {diagramError?.message || error?.message || 'Failed to load diagram'}
