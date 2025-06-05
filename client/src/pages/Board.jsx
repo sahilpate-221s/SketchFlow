@@ -176,9 +176,9 @@ const Board = () => {
   useEffect(() => {
     if (!diagram || isLoading || !isAuthenticated) return;
 
-    const isOwner = diagram.owner.toString() === user._id.toString();
-    const isEditor = diagram.collaborators.some(
-      c => c.user.toString() === user._id.toString() && c.role === 'editor'
+    const isOwner = diagram.owner && user && diagram.owner.toString && user._id && user._id.toString && diagram.owner.toString() === user._id.toString();
+    const isEditor = Array.isArray(diagram.collaborators) && user && user._id && user._id.toString && diagram.collaborators.some(
+      c => c.user && c.user.toString && c.user.toString() === user._id.toString() && c.role === 'editor'
     );
 
     if (!isOwner && !isEditor) return;
@@ -414,4 +414,4 @@ const Board = () => {
   );
 };
 
-export default Board; 
+export default Board;

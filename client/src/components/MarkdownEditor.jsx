@@ -30,9 +30,9 @@ const MarkdownEditor = () => {
   }
 
   return (
-    <div className={`fixed left-0 top-0 h-full bg-white/90 dark:bg-dark-surface/90 backdrop-blur-xl shadow-xl border-r border-gray-100/50 dark:border-dark-border/50 transition-all duration-300 ease-in-out ${
+    <div className={`fixed left-0 top-0 h-full bg-white/90 dark:bg-dark-surface/90 backdrop-blur-xl shadow-xl border-r border-gray-100/50 dark:border-dark-border/50 transition-all duration-300 ease-in-out z-30 ${
       isOpen ? 'w-96 translate-x-0' : 'w-12 -translate-x-0'
-    }`}>
+    }`} style={{ zIndex: 30 }}>
       {/* Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -90,4 +90,4 @@ const MarkdownEditor = () => {
   );
 };
 
-export default MarkdownEditor; 
+export default MarkdownEditor;

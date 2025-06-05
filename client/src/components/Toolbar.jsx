@@ -128,184 +128,135 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
 
   return (
     <div className="toolbar-container">
-      {/* Floating Toolbar */}
-      <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-500 ${
-        isScrolled ? 'scale-95 opacity-95' : 'scale-100 opacity-100'
-      }`}>
-        <div className="bg-white/98 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-200/90 p-2.5 flex items-center space-x-3">
-          {/* Main Tools */}
-          {TOOL_GROUPS.map((group) => (
-            <div
-              key={group.name}
-              className="bg-white/95 dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200/80 dark:border-dark-border/80 p-2 space-y-1"
-            >
+      {/* Top Center Toolbar - larger pill and buttons */}
+      <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="toolbar-pill top flex items-center gap-2 px-4 py-2 shadow-xl border border-white/10 bg-[#18181c] bg-opacity-95">
+          {TOOL_GROUPS.map((group, groupIdx) => (
+            <div key={group.name} className="flex items-center gap-1">
               {group.tools.map((toolItem) => (
                 <button
                   key={toolItem.id}
                   onClick={() => handleToolSelect(toolItem.id)}
-                  className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-hover transition-colors ${
-                    tool === toolItem.id
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-600 dark:text-gray-300'
-                  }`}
+                  className={`toolbar-btn top ${tool === toolItem.id ? 'toolbar-btn-active' : ''}`}
                   title={`${toolItem.label} (${toolItem.shortcut})`}
                 >
-                  {toolItem.icon}
+                  <span className="toolbar-btn-icon top">{toolItem.icon}</span>
+                  {tool === toolItem.id && <span className="toolbar-btn-indicator" />}
                 </button>
               ))}
+              {groupIdx < TOOL_GROUPS.length - 1 && (
+                <div className="toolbar-divider mx-2" />
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Bottom Toolbar - Combined controls centered */}
+      {/* Bottom Center Toolbar - compact pill and buttons */}
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-        <div className="bg-white/98 backdrop-blur-lg rounded-xl shadow-lg border border-gray-200/90 p-2 flex items-center space-x-4">
+        <div className="toolbar-pill bottom flex items-center gap-3 px-5 py-2 shadow-xl border border-white/10 bg-[#18181c] bg-opacity-95">
           {/* Grid Toggle */}
           <button
             onClick={onGridToggle}
-            className={`p-2 rounded-lg transition-all duration-200 group ${
-              isGridVisible 
-                ? 'bg-blue-100 text-blue-600 ring-1 ring-blue-500/30' 
-                : 'hover:bg-gray-100 text-gray-900'
-            }`}
+            className={`toolbar-btn bottom ${isGridVisible ? 'toolbar-btn-active' : ''}`}
+            title="Toggle Grid (G)"
           >
-            <Grid size={20} />
-            {/* Single tooltip */}
-            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg pointer-events-none z-50">
-              Toggle Grid (G)
-            </div>
+            <span className="toolbar-btn-icon bottom"><Grid size={20} /></span>
           </button>
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-gray-200" />
-
+          <div className="toolbar-divider" />
           {/* Undo/Redo */}
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => dispatch(undo())}
-              disabled={!canUndo}
-              className={`p-2 rounded-lg transition-all duration-200 ${
-                canUndo 
-                  ? 'hover:bg-gray-100 text-gray-900 hover:scale-105' 
-                  : 'text-gray-400 cursor-not-allowed'
-              }`}
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo size={20} />
-            </button>
-            <button
-              onClick={() => dispatch(redo())}
-              disabled={!canRedo}
-              className={`p-2 rounded-lg transition-all duration-200 ${
-                canRedo 
-                  ? 'hover:bg-gray-100 text-gray-900 hover:scale-105' 
-                  : 'text-gray-400 cursor-not-allowed'
-              }`}
-              title="Redo (Ctrl+Shift+Z)"
-            >
-              <Redo size={20} />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-gray-200" />
-
+          <button
+            onClick={() => dispatch(undo())}
+            disabled={!canUndo}
+            className={`toolbar-btn bottom ${canUndo ? '' : 'toolbar-btn-disabled'}`}
+            title="Undo (Ctrl+Z)"
+          >
+            <span className="toolbar-btn-icon bottom"><Undo size={20} /></span>
+          </button>
+          <button
+            onClick={() => dispatch(redo())}
+            disabled={!canRedo}
+            className={`toolbar-btn bottom ${canRedo ? '' : 'toolbar-btn-disabled'}`}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <span className="toolbar-btn-icon bottom"><Redo size={20} /></span>
+          </button>
+          <div className="toolbar-divider" />
           {/* Zoom Controls */}
-          <div className="flex items-center space-x-2 bg-gray-50/50 rounded-lg p-1">
-            <button
-              onClick={() => handleZoom(-0.1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-900 transition-all duration-200 hover:scale-105"
-              title="Zoom Out (-)"
-            >
-              <Minus size={18} />
-            </button>
-            <span className="px-2 py-1 bg-white rounded-lg text-sm text-gray-900 font-medium min-w-[60px] text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              onClick={() => handleZoom(0.1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-900 transition-all duration-200 hover:scale-105"
-              title="Zoom In (+)"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-gray-200" />
-
+          <button
+            onClick={() => handleZoom(-0.1)}
+            className="toolbar-btn bottom"
+            title="Zoom Out (-)"
+          >
+            <span className="toolbar-btn-icon bottom"><Minus size={18} /></span>
+          </button>
+          <span className="toolbar-zoom-label min-w-[60px] text-center text-base font-semibold text-white/90 select-none">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={() => handleZoom(0.1)}
+            className="toolbar-btn bottom"
+            title="Zoom In (+)"
+          >
+            <span className="toolbar-btn-icon bottom"><Plus size={18} /></span>
+          </button>
+          <div className="toolbar-divider" />
           {/* Collaboration & Share */}
-          <div className="flex items-center space-x-2">
-            <div className="relative">
-              <button
-                onClick={() => setShowCollaborators(!showCollaborators)}
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  showCollaborators
-                    ? 'bg-blue-100 text-blue-600 ring-1 ring-blue-500/30'
-                    : 'hover:bg-gray-100 text-gray-900'
-                }`}
-                title={`${collaborators.length} Collaborators`}
-              >
-                <Users size={20} />
-                {collaborators.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    {collaborators.length}
-                  </span>
-                )}
-              </button>
-              {showCollaborators && (
-                <div className="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-2">
-                  <div className="text-sm font-medium text-gray-900 mb-2">Collaborators</div>
-                  {collaborators.length === 0 ? (
-                    <div className="text-sm text-gray-500">No collaborators yet</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {collaborators.map((collab) => (
-                        <div key={collab.id} className="flex items-center space-x-2 text-sm">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: collab.color }} />
-                          <span className="text-gray-900">{collab.name}</span>
-                          <span className="text-gray-500 text-xs">({collab.role})</span>
-                        </div>
-                      ))}
+          <button
+            onClick={() => setShowCollaborators(!showCollaborators)}
+            className={`toolbar-btn bottom ${showCollaborators ? 'toolbar-btn-active' : ''}`}
+            title={`${collaborators.length} Collaborators`}
+          >
+            <span className="toolbar-btn-icon bottom"><Users size={20} /></span>
+            {collaborators.length > 0 && (
+              <span className="toolbar-collab-badge">{collaborators.length}</span>
+            )}
+          </button>
+          {showCollaborators && (
+            <div className="absolute bottom-full left-0 mb-2 w-64 toolbar-collab-list">
+              <div className="text-sm font-medium text-gray-100 mb-2">Collaborators</div>
+              {collaborators.length === 0 ? (
+                <div className="text-sm text-gray-400">No collaborators yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {collaborators.map((collab) => (
+                    <div key={collab.id} className="flex items-center space-x-2 text-sm">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: collab.color }} />
+                      <span className="text-gray-100">{collab.name}</span>
+                      <span className="text-gray-400 text-xs">({collab.role})</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
-            <button
-              onClick={onShare}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-900 transition-all duration-200 hover:scale-105"
-              title="Share Canvas"
-            >
-              <Share2 size={20} />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-gray-200" />
-
+          )}
+          <button
+            onClick={onShare}
+            className="toolbar-btn bottom"
+            title="Share Canvas"
+          >
+            <span className="toolbar-btn-icon bottom"><Share2 size={20} /></span>
+          </button>
+          <div className="toolbar-divider" />
           {/* Export/Import */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={onExport}
-              className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 text-sm font-medium flex items-center space-x-1 hover:scale-105 shadow-sm shadow-blue-500/30"
-              title="Export Canvas (Ctrl+E)"
-            >
-              <Download size={18} />
-              <span>Export</span>
-            </button>
-            <label className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 text-sm font-medium cursor-pointer flex items-center space-x-1 hover:scale-105 shadow-sm shadow-purple-500/30">
-              <Upload size={18} />
-              <span>Import</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={onImport}
-                className="hidden"
-              />
-            </label>
-          </div>
+          <button
+            onClick={onExport}
+            className="toolbar-btn bottom px-3 py-1.5 font-medium flex items-center gap-1"
+            title="Export Canvas (Ctrl+E)"
+          >
+            <span className="toolbar-btn-icon bottom"><Download size={18} /></span>
+            <span className="hidden sm:inline">Export</span>
+          </button>
+          <label className="toolbar-btn bottom px-3 py-1.5 font-medium cursor-pointer flex items-center gap-1">
+            <span className="toolbar-btn-icon bottom"><Upload size={18} /></span>
+            <span className="hidden sm:inline">Import</span>
+            <input
+              type="file"
+              accept=".json"
+              onChange={onImport}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
     </div>
