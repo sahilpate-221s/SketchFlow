@@ -15,7 +15,7 @@ const StickyNotes = () => {
       y: window.innerHeight / 2 - 75,
       width: 0, // Start with 0 width
       height: 0, // Start with 0 height
-      fill: '#fef08a',
+      fill: '#4b4b3f',
       stroke: '#000000',
       strokeWidth: 1,
       text: '',

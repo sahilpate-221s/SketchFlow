@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Rect, Circle, Arrow, Line, Text, Group, Transformer } from 'react-konva';
 import { catmullRomSpline } from '../utils/catmullRom';
-import { useEffect } from 'react';
 
 const ShapeRenderer = ({
   shapes,
@@ -52,6 +51,16 @@ const ShapeRenderer = ({
     }
   }, [selectedIds, shapes]);
 
+  // --- Handle transform start ---
+  const handleTransformStart = (node) => {
+    // Optionally, you can add logic here if needed when transform starts
+  };
+
+  // --- Handle transform (during transform) ---
+  const handleTransform = (node, shape) => {
+    // Optionally, update shape preview during transform if needed
+  };
+
   // --- Handle transform end (resize/reshape) ---
   const handleTransformEnd = (node, shape) => {
     if (!node || !shape) return;
@@ -76,6 +85,7 @@ const ShapeRenderer = ({
     emitShapeUpdate(diagramId, newShape);
     dispatch({ type: 'canvas/updateShape', payload: newShape });
   };
+
 
   return (
     <>
@@ -166,6 +176,8 @@ const ShapeRenderer = ({
         };
         // Add transform handlers to supported shapes
         const transformProps = isSelected && !readOnly && tool === 'select' ? {
+          onTransformStart: (e) => handleTransformStart(e.target),
+          onTransform: (e) => handleTransform(e.target, shape),
           onTransformEnd: (e) => handleTransformEnd(e.target, shape)
         } : {};
         switch (shape.type) {

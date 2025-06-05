@@ -562,7 +562,7 @@ const Canvas = ({ readOnly = false }) => {
       stroke: ["freehand", "line", "arrow"].includes(tool) ? "#fff" : strokeColor,
       strokeWidth: tool === "freehand" ? 3 : strokeWidth,
       strokeStyle: tool === "freehand" ? "solid" : strokeStyle,
-      fill: tool === "sticky" ? "#fef08a" : fillColor,
+      fill: tool === "sticky" ? "#4b4b3f" : fillColor,
       fontSize,
       draggable: !readOnly,
       rotation: 0,
@@ -1057,10 +1057,10 @@ const Canvas = ({ readOnly = false }) => {
   const renderCollaboratorPresence = () => {
     return (
       <div className="fixed top-4 right-4 z-50">
-        <div className="bg-[#181818]/95 rounded-lg shadow-lg p-3 space-y-2 backdrop-blur-sm border border-gray-800/50">
-          <h3 className="text-sm font-medium text-gray-400 mb-2 flex items-center">
+        <div className="bg-gradient-to-br from-neutral-900/90 to-black/95 rounded-xl shadow-2xl p-4 space-y-2 backdrop-blur-lg border border-white/10">
+          <h3 className="text-xs font-semibold text-neutral-300 mb-2 flex items-center tracking-wide uppercase">
             <svg
-              className="w-4 h-4 mr-2"
+              className="w-4 h-4 mr-2 text-neutral-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1081,22 +1081,26 @@ const Canvas = ({ readOnly = false }) => {
             return (
               <div
                 key={userId}
-                className="flex items-center justify-between space-x-2 p-1 rounded-md hover:bg-gray-100"
+                className="flex items-center justify-between space-x-2 p-1 rounded-md hover:bg-white/5 transition-colors"
               >
                 <div className="flex items-center space-x-2">
                   <div
-                    className="w-2 h-2 rounded-full"
+                    className="w-2.5 h-2.5 rounded-full border border-white/20 shadow"
                     style={{
                       backgroundColor: user.color,
                       boxShadow: isActive
-                        ? `0 0 0 2px ${user.color}40`
+                        ? `0 0 0 3px ${user.color}40`
                         : "none",
                     }}
                   />
-                  <span className="text-sm text-gray-100">{user.name}</span>
+                  <span className="text-xs text-neutral-100 font-medium drop-shadow-sm">
+                    {user.name}
+                  </span>
                 </div>
                 {cursor && (
-                  <span className="text-xs text-gray-400">{cursor.tool}</span>
+                  <span className="text-[10px] text-neutral-400 font-mono px-1">
+                    {cursor.tool}
+                  </span>
                 )}
               </div>
             );
@@ -1123,10 +1127,16 @@ const Canvas = ({ readOnly = false }) => {
   }, [selectedIds, shapes]);
 
   // --- TOOL/CURSOR TRANSITIONS POLISH ---
-  useEffect(() => {
-    // Remove debug logs, ensure instant cursor update
-    if (stageRef.current) {
-      const cursorMap = {
+useEffect(() => {
+  if (stageRef.current) {
+    if (tool === "eraser") {
+      // Modern, angled rectangle eraser SVG as cursor
+      const eraserSVG = encodeURIComponent(
+        `<svg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='7' y='20' width='18' height='8' rx='2' fill='%23f3f4f6' stroke='%2323232b' stroke-width='2' transform='rotate(-25 7 20)'/><rect x='11' y='7' width='12' height='12' rx='3' fill='%2323232b' stroke='%23f3f4f6' stroke-width='2' transform='rotate(-25 11 7)'/></svg>`
+      );
+      stageRef.current.container().style.cursor = `url('data:image/svg+xml,${eraserSVG}') 8 28, auto`;
+    } else {
+      stageRef.current.container().style.cursor = {
         select: "default",
         rectangle: "crosshair",
         circle: "crosshair",
@@ -1137,11 +1147,10 @@ const Canvas = ({ readOnly = false }) => {
         sticky: "crosshair",
         markdown: "crosshair",
         pan: "grab",
-        eraser: "crosshair",
-      };
-      stageRef.current.container().style.cursor = cursorMap[tool] || "default";
+      }[tool] || "default";
     }
-  }, [tool]);
+  }
+}, [tool]);
 
   // --- CLEANUP: Remove debug logs ---
   // Remove all console.log calls throughout the file
@@ -1190,36 +1199,16 @@ const Canvas = ({ readOnly = false }) => {
         dispatch={dispatch}
       />
 
-      {/* Floating button to open MarkdownEditor */}
-      <button
-        className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg"
-        onClick={openMarkdownEditor}
-        title="Open Markdown Editor"
-      >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 4v16m8-8H4"
-          />
-        </svg>
-      </button>
-
       {/* MarkdownEditor Modal in Portal */}
       {isMarkdownEditorOpen && (
         <Portal>
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black bg-opacity-60">
-            <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xl relative">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-neutral-950 via-neutral-900 to-black rounded-2xl shadow-2xl p-7 w-full max-w-xl relative border border-white/15 text-neutral-100">
               <button
-                className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+                className="absolute top-3 right-3 text-neutral-400 hover:text-white transition-colors"
                 onClick={closeMarkdownEditor}
                 title="Close"
+                tabIndex={0}
               >
                 <svg
                   className="w-6 h-6"
@@ -1235,15 +1224,45 @@ const Canvas = ({ readOnly = false }) => {
                   />
                 </svg>
               </button>
-              <MarkdownEditor
+              <h3 className="text-lg font-bold mb-4 text-white tracking-tight">
+                Markdown Notes
+              </h3>
+              <textarea
+                className="w-full min-h-[120px] max-h-60 bg-neutral-900 border border-white/10 rounded-lg p-3 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-white/20 shadow-inner resize-y placeholder-neutral-500 transition"
+                placeholder="Write your notes in markdown..."
                 value={markdownEditorValue}
-                onChange={setMarkdownEditorValue}
-                onSave={saveMarkdownContent}
-                onCancel={closeMarkdownEditor}
+                onChange={(e) => setMarkdownEditorValue(e.target.value)}
+                tabIndex={0}
+                style={{ fontFamily: "inherit", fontSize: "1rem" }}
               />
-              <div className="mt-4">
-                <h4 className="text-gray-700 font-semibold mb-2">Preview:</h4>
-                <div className="prose max-w-none bg-gray-50 p-3 rounded border border-gray-200">
+              <div className="flex items-center justify-end gap-3 mt-4">
+                <button
+                  onClick={closeMarkdownEditor}
+                  className="px-4 py-2 rounded-lg bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700/80 hover:text-white border border-white/10 transition font-medium shadow focus:outline-none focus:ring-2 focus:ring-white/20"
+                  tabIndex={0}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (markdownEditorValue.trim()) {
+                      saveMarkdownContent(markdownEditorValue);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-br from-neutral-700 via-neutral-800 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-600 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
+                  tabIndex={0}
+                  disabled={!markdownEditorValue.trim()}
+                  style={{
+                    opacity: markdownEditorValue.trim() ? 1 : 0.5,
+                    cursor: markdownEditorValue.trim() ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+              <div className="mt-6">
+                <h4 className="text-neutral-200 font-semibold mb-2">Preview:</h4>
+                <div className="prose max-w-none bg-neutral-950 p-3 rounded border border-white/10 text-neutral-100 prose-headings:text-white prose-p:text-neutral-200 prose-strong:text-white prose-code:bg-neutral-800 prose-code:text-neutral-200 prose-blockquote:border-neutral-700 prose-blockquote:text-neutral-400">
                   <ReactMarkdown>{markdownEditorValue}</ReactMarkdown>
                 </div>
               </div>
@@ -1256,13 +1275,15 @@ const Canvas = ({ readOnly = false }) => {
       <div
         className={`absolute inset-0 transition-all duration-300 ${
           isMarkdownPanelOpen ? "left-[300px]" : "left-0"
-        } bg-[#18181c] pointer-events-auto overflow-hidden`}
+        } bg-gradient-to-br from-black via-neutral-900 to-black pointer-events-auto overflow-hidden`}
         style={{ zIndex: 10 }}
       >
         <Stage
           ref={stageRef}
           width={stageWidth}
           height={stageHeight}
+          scaleX={zoom}
+          scaleY={zoom}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1324,37 +1345,42 @@ const Canvas = ({ readOnly = false }) => {
         diagramId={diagramId}
         readOnly={readOnly}
         zoom={zoom}
-      />
-
-      {/* Sticky Notes Panel */}
-      <StickyNotes />
+      />      {/* Sticky Notes Panel removed as requested */}
 
       <div className="fixed top-4 left-4 z-50 flex items-center space-x-4">
         <CollaboratorPresence
           collaboratorPresence={collaboratorPresence}
           collaboratorCursors={collaboratorCursors}
         />
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="flex items-center p-2 bg-gradient-to-br from-white/10 to-white/5 rounded-lg shadow-glossy hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all"
-          aria-label="Home"
-          title="Home"
-          style={{ cursor: 'pointer' }}
-        >
-          <svg
-            className="w-6 h-6 text-white/80"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {/* Home button hover area */}
+        <div className="relative group" style={{ width: 56, height: 56 }}>
+          <div
+            className="absolute inset-0 rounded-xl group-hover:bg-white/10 transition-colors duration-200 cursor-pointer"
+            aria-label="Show Home Button Hover Area"
+          ></div>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="opacity-0 group-hover:opacity-100 flex items-center p-2 bg-gradient-to-br from-neutral-800/90 to-black/90 rounded-lg shadow-xl hover:bg-neutral-800/80 backdrop-blur-md border border-white/40 transition-all duration-200 absolute top-1 left-1"
+            aria-label="Home"
+            title="Home"
+            style={{ cursor: 'pointer', boxShadow: '0 2px 12px 0 rgba(255,255,255,0.08)' }}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-6 h-6 text-white"
+              style={{ filter: 'brightness(1.25) drop-shadow(0 1px 2px #fff6)' }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

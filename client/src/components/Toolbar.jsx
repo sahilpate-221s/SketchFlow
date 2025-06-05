@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { SketchPicker } from 'react-color';
 import {
@@ -98,23 +98,14 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
     zoom,
     canUndo,
     canRedo,
+    selectedIds,
   } = useSelector((state) => state.canvas);
 
   const [showColorPicker, setShowColorPicker] = useState(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    console.log('Toolbar - Current tool:', tool);
-  }, [tool]);
+  const [toolbarHidden, setToolbarHidden] = useState(false);
+  const toolbarRef = useRef(null);
 
   const handleZoom = (delta) => {
     const newZoom = Math.max(0.1, Math.min(5, zoom + delta));
@@ -128,24 +119,46 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
 
   return (
     <div className="toolbar-container">
-      {/* Top Center Toolbar - larger pill and buttons */}
-      <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50">
-        <div className="toolbar-pill top flex items-center gap-2 px-4 py-2 shadow-xl border border-white/10 bg-[#18181c] bg-opacity-95">
+      {/* Top Center Toolbar - modernized pill and icons */}
+      <div
+        className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50"
+        style={{ minHeight: '56px', height: '56px' }}
+      >
+        <div className="toolbar-pill top flex items-center" style={{ minHeight: '56px', height: '56px', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
           {TOOL_GROUPS.map((group, groupIdx) => (
-            <div key={group.name} className="flex items-center gap-1">
+            <div key={group.name} className="toolbar-group">
               {group.tools.map((toolItem) => (
                 <button
                   key={toolItem.id}
                   onClick={() => handleToolSelect(toolItem.id)}
                   className={`toolbar-btn top ${tool === toolItem.id ? 'toolbar-btn-active' : ''}`}
-                  title={`${toolItem.label} (${toolItem.shortcut})`}
+                  title={toolItem.label}
+                  tabIndex={0}
+                  onMouseEnter={e => {
+                    const tooltip = e.currentTarget.querySelector('.toolbar-tooltip');
+                    if (tooltip) tooltip.style.opacity = '1';
+                  }}
+                  onMouseLeave={e => {
+                    const tooltip = e.currentTarget.querySelector('.toolbar-tooltip');
+                    if (tooltip) tooltip.style.opacity = '0';
+                  }}
+                  onBlur={e => {
+                    const tooltip = e.currentTarget.querySelector('.toolbar-tooltip');
+                    if (tooltip) tooltip.style.opacity = '0';
+                  }}
                 >
                   <span className="toolbar-btn-icon top">{toolItem.icon}</span>
-                  {tool === toolItem.id && <span className="toolbar-btn-indicator" />}
+                  {/* Show a line below the icon if selected */}
+                  {tool === toolItem.id && (
+                    <span className="toolbar-btn-underline" />
+                  )}
+                  <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}> 
+                    {toolItem.label} <span className="opacity-60">({toolItem.shortcut})</span>
+                  </span>
                 </button>
               ))}
               {groupIdx < TOOL_GROUPS.length - 1 && (
-                <div className="toolbar-divider mx-2" />
+                <span className="toolbar-dot-divider" />
               )}
             </div>
           ))}
@@ -157,57 +170,88 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
         <div className="toolbar-pill bottom flex items-center gap-3 px-5 py-2 shadow-xl border border-white/10 bg-[#18181c] bg-opacity-95">
           {/* Grid Toggle */}
           <button
-            onClick={onGridToggle}
-            className={`toolbar-btn bottom ${isGridVisible ? 'toolbar-btn-active' : ''}`}
+            className={`toolbar-btn bottom${isGridVisible ? ' toolbar-btn-active' : ''}`}
             title="Toggle Grid (G)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; onGridToggle(); }}
           >
             <span className="toolbar-btn-icon bottom"><Grid size={20} /></span>
+            {isGridVisible && <span className="toolbar-btn-underline" />}
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Toggle Grid <span className="opacity-60">(G)</span></span>
           </button>
-          <div className="toolbar-divider" />
           {/* Undo/Redo */}
           <button
-            onClick={() => dispatch(undo())}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; if (canUndo) dispatch(undo()); }}
             disabled={!canUndo}
-            className={`toolbar-btn bottom ${canUndo ? '' : 'toolbar-btn-disabled'}`}
+            className={`toolbar-btn bottom${canUndo ? '' : ' toolbar-btn-disabled'}`}
             title="Undo (Ctrl+Z)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Undo size={20} /></span>
+            {canUndo && <span className="toolbar-btn-underline" />}
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Undo <span className="opacity-60">(Ctrl+Z)</span></span>
           </button>
           <button
-            onClick={() => dispatch(redo())}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; if (canRedo) dispatch(redo()); }}
             disabled={!canRedo}
-            className={`toolbar-btn bottom ${canRedo ? '' : 'toolbar-btn-disabled'}`}
+            className={`toolbar-btn bottom${canRedo ? '' : ' toolbar-btn-disabled'}`}
             title="Redo (Ctrl+Shift+Z)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Redo size={20} /></span>
+            {canRedo && <span className="toolbar-btn-underline" />}
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Redo <span className="opacity-60">(Ctrl+Shift+Z)</span></span>
           </button>
-          <div className="toolbar-divider" />
           {/* Zoom Controls */}
           <button
-            onClick={() => handleZoom(-0.1)}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; handleZoom(-0.1); }}
             className="toolbar-btn bottom"
             title="Zoom Out (-)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Minus size={18} /></span>
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Zoom Out <span className="opacity-60">(-)</span></span>
           </button>
           <span className="toolbar-zoom-label min-w-[60px] text-center text-base font-semibold text-white/90 select-none">
             {Math.round(zoom * 100)}%
           </span>
           <button
-            onClick={() => handleZoom(0.1)}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; handleZoom(0.1); }}
             className="toolbar-btn bottom"
             title="Zoom In (+)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Plus size={18} /></span>
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Zoom In <span className="opacity-60">(+)</span></span>
           </button>
-          <div className="toolbar-divider" />
           {/* Collaboration & Share */}
           <button
-            onClick={() => setShowCollaborators(!showCollaborators)}
-            className={`toolbar-btn bottom ${showCollaborators ? 'toolbar-btn-active' : ''}`}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; setShowCollaborators(!showCollaborators); }}
+            className={`toolbar-btn bottom${showCollaborators ? ' toolbar-btn-active' : ''}`}
             title={`${collaborators.length} Collaborators`}
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Users size={20} /></span>
+            {showCollaborators && <span className="toolbar-btn-underline" />}
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Collaborators</span>
             {collaborators.length > 0 && (
               <span className="toolbar-collab-badge">{collaborators.length}</span>
             )}
@@ -231,25 +275,42 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
             </div>
           )}
           <button
-            onClick={onShare}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; onShare(); }}
             className="toolbar-btn bottom"
             title="Share Canvas"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Share2 size={20} /></span>
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Share Canvas</span>
           </button>
-          <div className="toolbar-divider" />
           {/* Export/Import */}
           <button
-            onClick={onExport}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; onExport(); }}
             className="toolbar-btn bottom px-3 py-1.5 font-medium flex items-center gap-1"
             title="Export Canvas (Ctrl+E)"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
           >
             <span className="toolbar-btn-icon bottom"><Download size={18} /></span>
             <span className="hidden sm:inline">Export</span>
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Export <span className="opacity-60">(Ctrl+E)</span></span>
           </button>
-          <label className="toolbar-btn bottom px-3 py-1.5 font-medium cursor-pointer flex items-center gap-1">
+          <label
+            className="toolbar-btn bottom px-3 py-1.5 font-medium cursor-pointer flex items-center gap-1"
+            tabIndex={0}
+            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
+            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
+          >
             <span className="toolbar-btn-icon bottom"><Upload size={18} /></span>
             <span className="hidden sm:inline">Import</span>
+            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Import</span>
             <input
               type="file"
               accept=".json"

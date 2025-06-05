@@ -172,11 +172,11 @@ const Dashboard = () => {
   }, [editingDiagram, diagrams]);
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-[#18181c] via-[#23232b] to-[#101014] text-gray-100 font-sans">
+    <div className="min-h-screen flex bg-gradient-to-br from-black via-neutral-900 to-black text-neutral-100 font-sans">
       {/* Progress Bar */}
       {loading && (
         <div className="fixed top-0 left-0 w-full h-1 z-50">
-          <div className="h-full bg-gradient-to-r from-white/80 to-white/30 animate-progress-bar" style={{width: '100%'}}></div>
+          <div className="h-full bg-gradient-to-r from-neutral-200/80 to-neutral-200/30 animate-progress-bar" style={{width: '100%'}}></div>
         </div>
       )}
       {/* Confetti Animation */}
@@ -186,19 +186,19 @@ const Dashboard = () => {
         </div>
       )}
       {/* Sidebar */}
-      <aside className="w-64 bg-gradient-to-b from-[#23232b]/90 to-[#18181c]/80 border-r border-[#23232b]/60 flex flex-col justify-between py-8 px-6 shadow-2xl rounded-r-2xl backdrop-blur-md">
+      <aside className="w-64 bg-gradient-to-b from-neutral-900/90 to-black/80 border-r border-neutral-800/60 flex flex-col justify-between py-8 px-6 shadow-2xl rounded-r-2xl backdrop-blur-md">
         <div>
           <div className="flex items-center mb-10">
             <span className="text-2xl font-extrabold tracking-tight text-white drop-shadow-gloss">SketchFlow</span>
           </div>
           <div className="mb-8">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#23232b] to-[#353545] flex items-center justify-center text-xl font-bold text-white border-2 border-white/20 shadow-glossy">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-neutral-900 to-neutral-700 flex items-center justify-center text-xl font-bold text-white border-2 border-white/20 shadow-glossy">
                 {user?.username?.[0]?.toUpperCase() || 'U'}
               </div>
               <div>
                 <div className="font-semibold text-white/90">{user?.username || 'User'}</div>
-                <div className="text-xs text-gray-400">{user?.email || ''}</div>
+                <div className="text-xs text-neutral-400">{user?.email || ''}</div>
               </div>
             </div>
           </div>
@@ -207,7 +207,7 @@ const Dashboard = () => {
           <nav className="space-y-2">
             <button
               onClick={createNewDiagram}
-              className="w-full flex items-center space-x-2 bg-gradient-to-r from-white/10 to-white/5 text-white font-bold py-2 px-4 rounded-lg shadow-glossy hover:shadow-xl hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all group relative overflow-hidden backdrop-blur-md"
+              className="w-full flex items-center space-x-2 bg-gradient-to-r from-neutral-800/80 to-black/60 text-white font-bold py-2 px-4 rounded-lg shadow-glossy hover:shadow-xl hover:bg-neutral-800/80 focus:outline-none focus:ring-2 focus:ring-neutral-700/30 transition-all group relative overflow-hidden backdrop-blur-md border border-white/20"
               style={{ cursor: 'pointer' }}
             >
               <span className="absolute inset-0 group-hover:animate-pulse-glow pointer-events-none" />
@@ -219,7 +219,7 @@ const Dashboard = () => {
         <div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center space-x-2 text-red-400 hover:text-red-600 py-2 px-4 rounded-lg transition-colors bg-white/5 hover:bg-white/10 backdrop-blur-md"
+            className="w-full flex items-center space-x-2 text-neutral-400 hover:text-neutral-200 py-2 px-4 rounded-lg transition-colors bg-neutral-800/60 hover:bg-neutral-700/80 backdrop-blur-md border border-white/20 focus:outline-none focus:ring-2 focus:ring-white/30"
             style={{ cursor: 'pointer' }}
           >
             <LogOut size={18} />
@@ -228,14 +228,14 @@ const Dashboard = () => {
         </div>
       </aside>
       {/* Main Content */}
-      <main className="flex-1 p-10 overflow-y-auto min-h-screen bg-gradient-to-br from-[#18181c]/90 to-[#101014]/90 relative">
+      <main className="flex-1 p-10 overflow-y-auto min-h-screen bg-gradient-to-br from-black/90 to-neutral-900/90 relative">
         {/* Glassy highlight overlay */}
         <div className="pointer-events-none absolute inset-0 z-0">
-          <div className="absolute left-1/2 top-0 -translate-x-1/2 w-3/4 h-32 bg-white/10 rounded-b-full blur-2xl opacity-40" />
-          <div className="absolute right-0 bottom-0 w-1/3 h-24 bg-white/5 rounded-tl-3xl blur-2xl opacity-30" />
+          <div className="absolute left-1/2 top-0 -translate-x-1/2 w-3/4 h-32 bg-white/10 rounded-b-full blur-2xl opacity-30" />
+          <div className="absolute right-0 bottom-0 w-1/3 h-24 bg-white/5 rounded-tl-3xl blur-2xl opacity-20" />
         </div>
-        <div className="absolute inset-0 pointer-events-none opacity-20" style={{backgroundImage: 'radial-gradient(circle at 20% 20%, #fff2 1px, transparent 1px), radial-gradient(circle at 80% 80%, #fff1 1px, transparent 1px)', backgroundSize: '40px 40px'}}></div>
-        <div className="relative z-10 bg-gradient-to-br from-[#23232b]/90 to-[#18181c]/80 border border-white/10 rounded-2xl shadow-2xl p-8 mb-8 backdrop-blur-md">
+        <div className="absolute inset-0 pointer-events-none opacity-10" style={{backgroundImage: 'radial-gradient(circle at 20% 20%, #fff2 1px, transparent 1px), radial-gradient(circle at 80% 80%, #fff1 1px, transparent 1px)', backgroundSize: '40px 40px'}}></div>
+        <div className="relative z-10 bg-gradient-to-br from-neutral-900/90 to-black/80 border border-white/10 rounded-2xl shadow-2xl p-8 mb-8 backdrop-blur-md">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-extrabold text-white mb-1 tracking-tight drop-shadow-gloss">Your Diagrams</h1>
@@ -243,7 +243,7 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center space-x-3">
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
                   <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-2-2"/></svg>
                 </span>
                 <input
@@ -251,14 +251,14 @@ const Dashboard = () => {
                   placeholder="Search diagrams..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-[#181A1B] border border-[#2D2D2D] text-gray-100 rounded-lg px-9 py-2 w-56 focus:outline-none focus:ring-2 focus:ring-[#334155] transition placeholder-gray-500 shadow-sm"
+                  className="bg-neutral-900 border border-neutral-800 text-neutral-100 rounded-lg px-9 py-2 w-56 focus:outline-none focus:ring-2 focus:ring-neutral-700 transition placeholder-neutral-500 shadow-sm"
                 />
               </div>
               {/* Sort Dropdown */}
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                className="bg-[#181A1B] border border-[#2D2D2D] text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#334155] text-sm"
+                className="bg-neutral-900 border border-neutral-800 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-700 text-sm"
                 title="Sort diagrams"
               >
                 {sortOptions.map(opt => (
@@ -267,14 +267,14 @@ const Dashboard = () => {
               </select>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-[#2D2D2D] text-white shadow' : 'bg-[#181A1B] text-gray-400'} transition`}
+                className={`p-2 rounded-lg border border-white/10 ${viewMode === 'grid' ? 'bg-neutral-800 text-white shadow border-white/20' : 'bg-neutral-900 text-neutral-400'} transition`}
                 aria-label="Grid view"
               >
                 <Grid />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-[#2D2D2D] text-white shadow' : 'bg-[#181A1B] text-gray-400'} transition`}
+                className={`p-2 rounded-lg border border-white/10 ${viewMode === 'list' ? 'bg-neutral-800 text-white shadow border-white/20' : 'bg-neutral-900 text-neutral-400'} transition`}
                 aria-label="List view"
               >
                 <List />
@@ -283,14 +283,14 @@ const Dashboard = () => {
           </div>
         </div>
         {error && (
-          <div className="mb-4 text-red-400 font-semibold bg-[#181b20] p-3 rounded border border-[#23262F] relative z-10">
+          <div className="mb-4 text-red-400 font-semibold bg-neutral-900 p-3 rounded border border-neutral-800 relative z-10">
             {error}
           </div>
         )}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8 relative z-10">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-gradient-to-br from-[#23232b]/90 to-[#18181c]/80 rounded-2xl shadow-2xl p-8 animate-pulse border border-white/10">
+              <div key={i} className="bg-gradient-to-br from-neutral-900/90 to-black/80 rounded-2xl shadow-2xl p-8 animate-pulse border border-white/10">
                 <div className="h-6 bg-white/10 rounded w-3/4 mb-4"></div>
                 <div className="h-4 bg-white/10 rounded w-1/2 mb-2"></div>
                 <div className="h-4 bg-white/10 rounded w-1/3"></div>
@@ -308,12 +308,12 @@ const Dashboard = () => {
             {sortedDiagrams.map((diagram) => (
               <div
                 key={diagram._id}
-                className={`bg-gradient-to-br from-[#23232b]/90 to-[#18181c]/80 rounded-2xl shadow-2xl p-6 relative group border border-white/10 ring-0 hover:ring-2 hover:ring-white/30 hover:shadow-2xl hover:-translate-y-1.5 active:scale-95 transition-all backdrop-blur-md overflow-hidden ${diagram._id === lastUpdatedDiagram?._id ? 'border-white/30' : ''}`}
+                className={`bg-gradient-to-br from-neutral-900/90 to-black/80 rounded-2xl shadow-2xl p-6 relative group border border-white/10 ring-0 hover:ring-2 hover:ring-white/30 hover:shadow-2xl hover:-translate-y-1.5 active:scale-95 transition-all backdrop-blur-md overflow-hidden ${diagram._id === lastUpdatedDiagram?._id ? 'border-white/30' : ''}`}
                 style={{ cursor: 'pointer' }}
                 onClick={() => navigate(`/board/${diagram._id}`)}
               >
                 {/* Glass reflection on card */}
-                <div className="absolute left-0 top-0 w-full h-1/3 bg-white/10 rounded-t-2xl blur-md opacity-30 pointer-events-none" />
+                <div className="absolute left-0 top-0 w-full h-1/3 bg-white/10 rounded-t-2xl blur-md opacity-20 pointer-events-none" />
                 {editingDiagram === diagram._id ? (
                   <input
                     ref={editInputRef}
@@ -323,46 +323,46 @@ const Dashboard = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleTitleSubmit(e, diagram._id);
                     }}
-                    className="bg-[#101216] border border-[#23262F] text-gray-100 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-[#334155]"
+                    className="bg-black border border-neutral-800 text-neutral-100 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-neutral-700"
                     autoFocus
                     onClick={e => e.stopPropagation()}
                   />
                 ) : (
                   <div className="flex items-center gap-2">
                     <h2
-                      className="text-xl font-bold cursor-pointer text-gray-100 group-hover:text-[#7f5fff] truncate drop-shadow"
+                      className="text-xl font-bold cursor-pointer text-neutral-100 group-hover:text-neutral-200 truncate drop-shadow"
                       onClick={e => { e.stopPropagation(); handleTitleEdit(diagram); }}
                     >
                       {diagram.title}
                     </h2>
                     {diagram._id === lastUpdatedDiagram?._id && (
-                      <span className="ml-1 px-2 py-0.5 text-xs rounded bg-[#334155] text-white font-semibold animate-bounce-slow shadow-lg">Recent</span>
+                      <span className="ml-1 px-2 py-0.5 text-xs rounded bg-neutral-800 text-neutral-200 font-semibold animate-bounce-slow shadow-lg">Recent</span>
                     )}
                   </div>
                 )}
-                <p className="text-gray-400 mt-2 text-xs">Last updated: {new Date(diagram.updatedAt).toLocaleString()}</p>
-                <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="text-neutral-400 mt-2 text-xs">Last updated: {new Date(diagram.updatedAt).toLocaleString()}</p>
+                <div className="absolute top-4 right-4 flex space-x-1 group-hover:opacity-100 opacity-90 transition-opacity">
                   <button
                     onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="text-white/60 hover:text-white"
+                    className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60"
                     aria-label="Edit diagram"
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', padding: '0.22rem 0.32rem', minWidth: 0, minHeight: 0 }}
                   >
-                    <Edit2 />
+                    <Edit2 size={15} />
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); deleteDiagram(diagram._id); }}
-                    className="text-red-400 hover:text-red-600"
+                    className="text-red-400 hover:text-red-600 border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60"
                     aria-label="Delete diagram"
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', padding: '0.22rem 0.32rem', minWidth: 0, minHeight: 0 }}
                   >
-                    <Trash2 />
+                    <Trash2 size={15} />
                   </button>
                 </div>
                 {/* Open Canvas Button */}
                 <button
                   onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                  className="mt-4 w-full bg-gradient-to-r from-white/10 to-white/5 hover:from-white/20 hover:to-white/10 text-white font-semibold py-2 rounded-lg shadow-glossy transition-all flex items-center justify-center gap-2 group/open backdrop-blur-md"
+                  className="mt-4 w-full bg-gradient-to-r from-neutral-800/80 to-black/60 hover:from-neutral-700/80 hover:to-neutral-800/80 text-white font-semibold py-2 rounded-lg shadow-glossy transition-all flex items-center justify-center gap-2 group/open backdrop-blur-md border border-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
                   aria-label="Open diagram canvas"
                   style={{ cursor: 'pointer' }}
                 >
@@ -377,12 +377,12 @@ const Dashboard = () => {
             {sortedDiagrams.map((diagram) => (
               <li
                 key={diagram._id}
-                className={`bg-gradient-to-br from-[#23232b]/90 to-[#18181c]/80 rounded-2xl shadow-2xl p-4 flex justify-between items-center group border border-white/10 hover:border-white/30 transition hover:shadow-2xl hover:-translate-y-1.5 active:scale-95 backdrop-blur-md overflow-hidden ${diagram._id === lastUpdatedDiagram?._id ? 'border-white/30' : ''}`}
+                className={`bg-gradient-to-br from-neutral-900/90 to-black/80 rounded-2xl shadow-2xl p-4 flex justify-between items-center group border border-white/10 hover:border-white/30 transition hover:shadow-2xl hover:-translate-y-1.5 active:scale-95 backdrop-blur-md overflow-hidden ${diagram._id === lastUpdatedDiagram?._id ? 'border-white/30' : ''}`}
                 style={{ cursor: 'pointer' }}
                 onClick={() => navigate(`/board/${diagram._id}`)}
               >
                 {/* Glass reflection on card */}
-                <div className="absolute left-0 top-0 w-full h-1/3 bg-white/10 rounded-t-2xl blur-md opacity-30 pointer-events-none" />
+                <div className="absolute left-0 top-0 w-full h-1/3 bg-white/10 rounded-t-2xl blur-md opacity-20 pointer-events-none" />
                 {editingDiagram === diagram._id ? (
                   <input
                     ref={editInputRef}
@@ -392,27 +392,27 @@ const Dashboard = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleTitleSubmit(e, diagram._id);
                     }}
-                    className="bg-[#101216] border border-[#23262F] text-gray-100 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-[#334155]"
+                    className="bg-black border border-neutral-800 text-neutral-100 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-neutral-700"
                     autoFocus
                     onClick={e => e.stopPropagation()}
                   />
                 ) : (
                   <div className="flex items-center gap-2">
                     <span
-                      className="text-lg font-bold cursor-pointer text-gray-100 group-hover:text-[#7f5fff] truncate drop-shadow"
+                      className="text-lg font-bold cursor-pointer text-neutral-100 group-hover:text-neutral-200 truncate drop-shadow"
                       onClick={e => { e.stopPropagation(); handleTitleEdit(diagram); }}
                     >
                       {diagram.title}
                     </span>
                     {diagram._id === lastUpdatedDiagram?._id && (
-                      <span className="ml-1 px-2 py-0.5 text-xs rounded bg-[#334155] text-white font-semibold animate-bounce-slow shadow-lg">Recent</span>
+                      <span className="ml-1 px-2 py-0.5 text-xs rounded bg-neutral-800 text-neutral-200 font-semibold animate-bounce-slow shadow-lg">Recent</span>
                     )}
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="bg-gradient-to-r from-white/10 to-white/5 hover:from-white/20 hover:to-white/10 text-white font-semibold px-3 py-1 rounded-lg shadow-glossy transition-all flex items-center gap-1 text-sm backdrop-blur-md"
+                    className="bg-gradient-to-r from-neutral-800/80 to-black/60 hover:from-neutral-700/80 hover:to-neutral-800/80 text-white font-semibold px-3 py-1 rounded-lg shadow-glossy transition-all flex items-center gap-1 text-sm backdrop-blur-md border border-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
                     aria-label="Open diagram canvas"
                     style={{ cursor: 'pointer' }}
                   >
@@ -421,7 +421,7 @@ const Dashboard = () => {
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="text-white/60 hover:text-white"
+                    className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-2 focus:ring-white/30"
                     aria-label="Edit diagram"
                     style={{ cursor: 'pointer' }}
                   >
@@ -429,7 +429,7 @@ const Dashboard = () => {
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); deleteDiagram(diagram._id); }}
-                    className="text-red-400 hover:text-red-600"
+                    className="text-red-400 hover:text-red-600 border border-white/10 rounded focus:outline-none focus:ring-2 focus:ring-white/30"
                     aria-label="Delete diagram"
                     style={{ cursor: 'pointer' }}
                   >
@@ -441,21 +441,11 @@ const Dashboard = () => {
           </ul>
         )}
         <div className="mt-12 flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative z-10">
-          <div className="text-gray-400 text-sm">Total diagrams: <span className="text-gray-200 font-bold">{totalDiagrams}</span></div>
+          <div className="text-neutral-400 text-sm">Total diagrams: <span className="text-neutral-200 font-bold">{totalDiagrams}</span></div>
           {lastUpdatedDiagram && (
-            <div className="text-gray-400 text-sm">Last updated: <span className="text-gray-200 font-bold">{lastUpdatedDiagram.title}</span> ({new Date(lastUpdatedDiagram.updatedAt).toLocaleString()})</div>
+            <div className="text-neutral-400 text-sm">Last updated: <span className="text-neutral-200 font-bold">{lastUpdatedDiagram.title}</span> ({new Date(lastUpdatedDiagram.updatedAt).toLocaleString()})</div>
           )}
         </div>
-        {/* Floating New Diagram Button */}
-        <button
-          onClick={createNewDiagram}
-          className="fixed bottom-8 right-8 z-40 bg-gradient-to-br from-white/10 to-white/5 hover:from-white/20 hover:to-white/10 text-white rounded-full shadow-glossy p-4 flex items-center justify-center transition-all group backdrop-blur-md border border-white/10 ring-1 ring-white/10 hover:ring-white/30"
-          title="Create New Diagram (N)"
-          style={{ cursor: 'pointer', boxShadow: '0 8px 32px 0 rgba(255,255,255,0.10), 0 1.5px 4px 0 rgba(255,255,255,0.12)' }}
-        >
-          <Plus size={28} />
-          <span className="sr-only">Create New Diagram</span>
-        </button>
       </main>
     </div>
   );

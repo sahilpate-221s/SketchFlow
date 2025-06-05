@@ -1,0 +1,12 @@
+@keyframes shadowPulse {
+  0%, 100% {
+    box-shadow: 0 0 32px 0 #0f172a88, 0 0 0 0 #fff0;
+  }
+  50% {
+    box-shadow: 0 0 64px 8px #1e293b55, 0 0 0 0 #fff0;
+  }
+}
+
+.shadowPulse {
+  animation: shadowPulse 6s ease-in-out infinite;
+}

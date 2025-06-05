@@ -17,7 +17,7 @@ const initialState = {
   gridSize: 20,
   zoom: 1,
   isGridSnap: true,
-  isGridVisible: true,
+  isGridVisible: false,
   textAlign: 'left',
   stickyNotes: [],
   markdownContent: '',
@@ -56,11 +56,11 @@ const canvasSlice = createSlice({
       const newShape = action.payload;
       
       // Add default properties based on shape type
-      switch (newShape.type) {
-        case 'sticky':
+      switch (newShape.type) {        case 'sticky':
           newShape.width = newShape.width || 200;
           newShape.height = newShape.height || 150;
-          newShape.fill = newShape.fill || '#fef08a';
+          // Use a modern, premium neutral/black gradient for sticky notes
+          newShape.fill = newShape.fill || 'linear-gradient(135deg, #23232b 0%, #35353f 100%)';
           newShape.text = newShape.text || '';
           newShape.fontSize = newShape.fontSize || 16;
           break;

@@ -44,15 +44,22 @@ export const useDiagram = (diagramId) => {
     }
   };
 
-  // Share diagram
-  const shareDiagram = async (isPublic) => {
+  // Share diagram by adding collaborator
+  const shareDiagram = async ({ email, role }) => {
     try {
       setError(null);
-      const response = await axios.post(`/api/diagrams/${diagramId}/share`, { isPublic });
-      setDiagram(response.data.diagram);
+      // Resolve email to userId
+      const resolveResponse = await axios.post('/api/users/resolve-email', { email });
+      const userId = resolveResponse.data.userId;
+      // Add collaborator
+      const response = await axios.post(`/api/diagrams/${diagramId}/collaborators`, {
+        userId,
+        role,
+      });
+      setDiagram(response.data);
       return response.data;
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update sharing settings');
+      setError(err.response?.data?.error || 'Failed to share diagram');
       throw err;
     }
   };

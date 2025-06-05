@@ -73,13 +73,7 @@ const Login = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 
-                           border border-gray-300 dark:border-dark-border 
-                           placeholder-gray-500 dark:placeholder-gray-400 
-                           text-gray-900 dark:text-dark-text 
-                           dark:bg-dark-surface
-                           rounded-t-md focus:outline-none focus:ring-indigo-500 
-                           focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-neutral-800 placeholder-neutral-500 text-neutral-100 bg-neutral-900 rounded-t-md focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:border-neutral-400 focus:z-10 sm:text-sm"
                 placeholder="Email address"
               />
             </div>
@@ -95,13 +89,7 @@ const Login = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 
-                           border border-gray-300 dark:border-dark-border 
-                           placeholder-gray-500 dark:placeholder-gray-400 
-                           text-gray-900 dark:text-dark-text 
-                           dark:bg-dark-surface
-                           rounded-b-md focus:outline-none focus:ring-indigo-500 
-                           focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-neutral-800 placeholder-neutral-500 text-neutral-100 bg-neutral-900 rounded-b-md focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:border-neutral-400 focus:z-10 sm:text-sm"
                 placeholder="Password"
               />
             </div>
@@ -111,12 +99,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 
-                         border border-transparent text-sm font-medium rounded-md 
-                         text-white bg-indigo-600 hover:bg-indigo-700 
-                         focus:outline-none focus:ring-2 focus:ring-offset-2 
-                         focus:ring-indigo-500 dark:ring-offset-dark-surface
-                         disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-neutral-800 text-sm font-medium rounded-md text-white bg-gradient-to-br from-black via-neutral-900 to-black/70 hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-600 dark:ring-offset-dark-surface disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
@@ -125,7 +108,7 @@ const Login = () => {
           <div className="text-center">
             <Link
               to="/"
-              className="font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
+              className="font-medium bg-gradient-to-br from-black via-neutral-900 to-black/70 text-white px-4 py-2 rounded-md hover:bg-neutral-800 transition-colors"
             >
               Continue as guest
             </Link>
@@ -136,4 +119,4 @@ const Login = () => {
   );
 };
 
-export default Login; 
+export default Login;

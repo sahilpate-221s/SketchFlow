@@ -16,6 +16,7 @@ import {
   ChevronRight,
   CheckCircle2
 } from 'lucide-react';
+import '../shadowPulse.css';
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -116,21 +117,30 @@ const Landing = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-950">
+    <div className="min-h-screen bg-gradient-to-br from-black via-neutral-900 to-black text-white relative overflow-hidden">
+      {/* Animated Black Texture Background */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="w-full h-full opacity-20 shadowPulse mix-blend-normal" style={{
+          background: 'radial-gradient(circle at 20% 30%, rgba(30,30,30,0.25) 0, transparent 60%), radial-gradient(circle at 80% 70%, rgba(60,60,60,0.18) 0, transparent 60%), repeating-linear-gradient(135deg, rgba(0,0,0,0.18) 0px, rgba(30,30,30,0.12) 2px, transparent 2px, transparent 24px)',
+          backgroundSize: '1000px 1000px, 800px 800px, 32px 32px',
+          backgroundPosition: 'center center, right bottom, 0 0',
+          backgroundRepeat: 'no-repeat, no-repeat, repeat',
+          filter: 'drop-shadow(0 0 32px #0008)'
+        }} />
+      </div>
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-black via-neutral-900 to-black/90 backdrop-blur border-b border-neutral-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex-shrink-0">
-              <Link to="/" className="text-2xl font-handwriting bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+              <Link to="/" className="text-2xl font-handwriting bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">
                 SketchFlow
               </Link>
             </div>
             <div className="flex items-center space-x-4">
-              {/* <ThemeToggle /> */}
               <button
                 onClick={handleGuestAccess}
-                className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 px-4 py-2 rounded-lg transition-colors"
+                className="text-neutral-300 hover:text-white px-4 py-2 rounded-lg transition-colors border border-neutral-800 bg-neutral-900 hover:bg-neutral-800"
               >
                 Continue as guest
               </button>
@@ -146,65 +156,62 @@ const Landing = () => {
             {/* Left Column - Hero Content */}
             <div className="space-y-8">
               <div className="space-y-4">
-                <h1 className="text-5xl font-bold text-slate-900 dark:text-white">
+                <h1 className="text-5xl font-bold text-white">
                   Create Beautiful Diagrams
-                  <span className="block bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">Together</span>
+                  <span className="block bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Together</span>
                 </h1>
-                <p className="text-xl text-slate-600 dark:text-slate-300">
+                <p className="text-xl text-slate-300">
                   SketchFlow is a collaborative diagramming tool that helps teams visualize ideas, 
                   create flowcharts, and work together in real-time.
                 </p>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
-                  <Users className="h-5 w-5 text-emerald-500" />
+                <div className="flex items-center space-x-2 text-slate-300">
+                  <Users className="h-5 w-5 text-white" />
                   <span>Real-time collaboration</span>
                 </div>
-                <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
-                  <Zap className="h-5 w-5 text-emerald-500" />
+                <div className="flex items-center space-x-2 text-slate-300">
+                  <Zap className="h-5 w-5 text-white" />
                   <span>Lightning fast</span>
                 </div>
-                <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
-                  <Lock className="h-5 w-5 text-emerald-500" />
+                <div className="flex items-center space-x-2 text-slate-300">
+                  <Lock className="h-5 w-5 text-white" />
                   <span>Secure & private</span>
                 </div>
               </div>
-
               <div className="flex items-center space-x-4">
                 <a
                   href="https://github.com/yourusername/sketchflow"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  className="inline-flex items-center bg-gradient-to-br from-black via-neutral-900 to-black/70 px-4 py-2 border border-white/40 rounded-lg text-slate-200 hover:bg-neutral-300 transition-all duration-200"
                 >
                   <Github className="h-5 w-5 mr-2" />
                   Star on GitHub
                 </a>
                 <button
                   onClick={() => setIsLogin(false)}
-                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-lg hover:from-emerald-700 hover:to-teal-600 transition-all duration-200 shadow-lg shadow-emerald-500/20"
+                  className="inline-flex items-center px-6 py-3 border bg-gradient-to-br from-black via-neutral-900 to-black/70 text-white rounded-lg hover:bg-neutral-300 transition-all duration-200 shadow-lg cursor-pointer"
                 >
                   Get Started
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </button>
               </div>
             </div>
-
             {/* Right Column - Auth Form */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-100 dark:border-slate-700">
-              <div className="space-y-6">
+            <div className="bg-gradient-to-br from-black via-neutral-900 to-black/90 rounded-2xl shadow-2xl p-14 border border-white/40 flex flex-col items-center max-w-xl w-full mx-auto z-10" style={{ minWidth: 420 }}>
+              <div className="w-full space-y-7">
                 <div className="text-center">
-                  <h2 className="text-2xl font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+                  <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-1">
                     {isLogin ? 'Welcome back' : 'Create your account'}
                   </h2>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                  <p className="mt-2 text-base text-slate-400">
                     {isLogin ? (
                       <>
                         Don't have an account?{' '}
                         <button
                           onClick={() => setIsLogin(false)}
-                          className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 font-medium"
+                          className="text-white hover:underline font-semibold"
                         >
                           Sign up
                         </button>
@@ -214,7 +221,7 @@ const Landing = () => {
                         Already have an account?{' '}
                         <button
                           onClick={() => setIsLogin(true)}
-                          className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 font-medium"
+                          className="text-white hover:underline font-semibold"
                         >
                           Sign in
                         </button>
@@ -222,16 +229,14 @@ const Landing = () => {
                     )}
                   </p>
                 </div>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5 w-full">
                   {error && (
-                    <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-100 dark:border-red-800">
-                      <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                    <div className="rounded-lg bg-red-900/30 p-4 border border-red-800">
+                      <p className="text-sm text-red-300">{error}</p>
                     </div>
                   )}
-
                   <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="email" className="block text-sm font-semibold text-slate-200 mb-1">
                       Email address
                     </label>
                     <input
@@ -240,16 +245,12 @@ const Landing = () => {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="block w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 
-                               bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                               focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                               transition-colors placeholder-slate-400 dark:placeholder-slate-500"
+                      className="block w-full px-4 py-3 rounded-lg border border-white/40 bg-black/20 text-white focus:ring-2 focus:ring-white focus:border-white transition-colors placeholder-slate-500 shadow-sm focus:shadow-md outline-none"
                       placeholder="Enter your email"
                     />
                   </div>
-
                   <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="password" className="block text-sm font-semibold text-slate-200 mb-1">
                       Password
                     </label>
                     <input
@@ -258,17 +259,13 @@ const Landing = () => {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="block w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 
-                               bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                               focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                               transition-colors placeholder-slate-400 dark:placeholder-slate-500"
+                      className="block w-full px-4 py-3 rounded-lg border border-white/40 bg-black/20 text-white focus:ring-2 focus:ring-white focus:border-white transition-colors placeholder-slate-500 shadow-sm focus:shadow-md outline-none"
                       placeholder="Enter your password"
                     />
                   </div>
-
                   {!isLogin && (
                     <div>
-                      <label htmlFor="confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      <label htmlFor="confirm-password" className="block text-sm font-semibold text-slate-200 mb-1">
                         Confirm Password
                       </label>
                       <input
@@ -277,22 +274,15 @@ const Landing = () => {
                         required
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="block w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 
-                                 bg-white dark:bg-slate-800 text-slate-900 dark:text-white
-                                 focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                                 transition-colors placeholder-slate-400 dark:placeholder-slate-500"
+                        className="block w-full px-4 py-3 rounded-lg border border-white/40 bg-black/20 text-white focus:ring-2 focus:ring-white focus:border-white transition-colors placeholder-slate-500 shadow-sm focus:shadow-md outline-none"
                         placeholder="Confirm your password"
                       />
                     </div>
                   )}
-
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-lg 
-                             hover:from-emerald-700 hover:to-teal-600 focus:outline-none focus:ring-2 
-                             focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 
-                             disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/20"
+                    className="w-full px-4 py-3 bg-black/40  text-white border border-slate-500 rounded-lg font-semibold text-lg shadow-lg hover:bg-gradient-to-br hover:cursor-pointer from-black via-neutral-900 to-black/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
                   >
                     {loading
                       ? isLogin
@@ -303,23 +293,19 @@ const Landing = () => {
                         : 'Create account'}
                   </button>
                 </form>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center ">
+                    <div className="w-full border-t border-white/30"></div>
                   </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  <div className="relative flex justify-center text-sm ">
+                    <span className="px-2 bg-slate-950 text-white">
                       Or continue with
                     </span>
                   </div>
                 </div>
-
                 <button
                   onClick={handleGuestAccess}
-                  className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg 
-                           text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 
-                           transition-colors flex items-center justify-center space-x-2"
+                  className="w-full px-4 py-3 border border-slate-800 rounded-lg text-white bg-gradient-to-bl from-black/40 via-neutral-900 to-black hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 font-semibold shadow-sm"
                 >
                   <Unlock className="h-5 w-5" />
                   <span>Continue as guest</span>
@@ -329,31 +315,28 @@ const Landing = () => {
           </div>
         </div>
       </div>
-
       {/* Features Section */}
-      <div className="py-24 bg-slate-50 dark:bg-slate-900/50">
+      <div className="py-24 bg-gradient-to-br from-black via-neutral-900 to-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-4">
               Everything you need to create amazing diagrams
             </h2>
-            <p className="text-xl text-slate-600 dark:text-slate-300">
+            <p className="text-xl text-neutral-400">
               Powerful features to help you and your team work better together
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <div
                 key={index}
-                className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-100 dark:border-slate-700
-                         hover:shadow-xl transition-all duration-200 hover:-translate-y-1"
+                className="bg-gradient-to-br from-black via-neutral-900 to-black/90 rounded-xl p-6 shadow-lg border border-neutral-800 hover:shadow-xl transition-all duration-200 hover:-translate-y-1"
               >
-                <div className="text-emerald-500 mb-4">{feature.icon}</div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                <div className="text-white mb-4">{feature.icon}</div>
+                <h3 className="text-lg font-semibold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-2">
                   {feature.title}
                 </h3>
-                <p className="text-slate-600 dark:text-slate-300">
+                <p className="text-neutral-400">
                   {feature.description}
                 </p>
               </div>
@@ -361,41 +344,39 @@ const Landing = () => {
           </div>
         </div>
       </div>
-
       {/* Testimonials Section */}
-      <div className="py-24">
+      <div className="py-24 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-4">
               Loved by teams worldwide
             </h2>
-            <p className="text-xl text-slate-600 dark:text-slate-300">
+            <p className="text-xl text-neutral-400">
               See what our users have to say about SketchFlow
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
               <div
                 key={index}
-                className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-100 dark:border-slate-700"
+                className="bg-gradient-to-br from-black via-neutral-900 to-black/90 rounded-xl p-6 shadow-lg border border-neutral-800"
               >
                 <div className="flex items-center mb-4">
-                  <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <div className="h-12 w-12 rounded-full bg-neutral-800 flex items-center justify-center">
+                    <span className="text-white font-semibold">
                       {testimonial.author[0]}
                     </span>
                   </div>
                   <div className="ml-4">
-                    <h4 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    <h4 className="text-lg font-semibold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">
                       {testimonial.author}
                     </h4>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                    <p className="text-sm text-neutral-400">
                       {testimonial.role}
                     </p>
                   </div>
                 </div>
-                <p className="text-slate-600 dark:text-slate-300 italic">
+                <p className="text-neutral-300 italic">
                   "{testimonial.quote}"
                 </p>
               </div>
@@ -403,116 +384,112 @@ const Landing = () => {
           </div>
         </div>
       </div>
-
       {/* CTA Section */}
-      <div className="py-24 bg-gradient-to-r from-emerald-600 to-teal-500">
+      <div className="py-24 bg-gradient-to-r from-black via-neutral-900 to-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-4">
             Ready to start creating?
           </h2>
-          <p className="text-xl text-emerald-100 mb-8">
+          <p className="text-xl text-neutral-400 mb-8">
             Join thousands of teams using SketchFlow to create amazing diagrams
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 ">
             <button
               onClick={() => setIsLogin(false)}
-              className="w-full sm:w-auto px-8 py-3 bg-white text-emerald-600 rounded-lg 
-                       hover:bg-emerald-50 transition-colors font-medium shadow-lg"
+              className="w-full sm:w-auto px-8 py-3 bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 transition-colors font-medium shadow-lg cursor-pointer"
             >
               Get Started for Free
             </button>
             <button
               onClick={handleGuestAccess}
-              className="w-full sm:w-auto px-8 py-3 border-2 border-white text-white rounded-lg 
-                       hover:bg-white/10 transition-colors font-medium"
+              className="w-full sm:w-auto px-8 py-3 border-2 border-white text-white rounded-lg hover:bg-white/10 transition-colors font-medium cursor-pointer "
             >
               Try as Guest
             </button>
           </div>
         </div>
       </div>
-
       {/* Footer */}
-      <footer className="bg-slate-50 dark:bg-slate-900 py-12">
+      <footer className="bg-neutral-950 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+              <h3 className="text-lg font-semibold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent mb-4">
                 SketchFlow
               </h3>
-              <p className="text-slate-600 dark:text-slate-300">
+              <p className="text-neutral-400">
                 Create beautiful diagrams together with your team.
               </p>
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">
+              <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
                 Product
               </h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Features
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Pricing
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Enterprise
                   </a>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">
+              <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
                 Resources
               </h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Documentation
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Blog
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Support
                   </a>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider mb-4">
+              <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
                 Company
               </h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     About
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Careers
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400">
+                  <a href="#" className="text-neutral-400 hover:text-white">
                     Contact
                   </a>
                 </li>
               </ul>
             </div>
           </div>
-          <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-700">
-            <p className="text-center text-slate-600 dark:text-slate-300">
+          <div className="mt-12 pt-8 border-t border-neutral-800">
+            <p className="text-center text-neutral-400">
               © 2024 SketchFlow. All rights reserved.
             </p>
           </div>
@@ -522,4 +499,4 @@ const Landing = () => {
   );
 };
 
-export default Landing; 
+export default Landing;
