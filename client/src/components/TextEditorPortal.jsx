@@ -57,7 +57,7 @@ const TextEditorPortal = ({
             className="border border-gray-300 rounded p-1 bg-[#181818] shadow-lg min-w-[100px] min-h-[24px] resize-none"
             style={{
               fontSize: `${shape.fontSize || 16}px`,
-              color: shape.stroke || '#000',
+              color: (shape.stroke && (shape.stroke.toLowerCase() === '#000000' || shape.stroke.toLowerCase() === '#000')) ? '#ffffff' : (shape.stroke || '#000'),
               width: shape.type === 'sticky' ? `${shape.width - 20}px` : 'auto',
               height: shape.type === 'sticky' ? `${shape.height - 20}px` : 'auto',
             }}

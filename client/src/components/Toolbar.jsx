@@ -36,6 +36,7 @@ import {
   Share2
 } from 'lucide-react';
 import './Toolbar.css';
+import ShareButton from './ShareButton';
 
 const TOOL_GROUPS = [
   {
@@ -274,18 +275,9 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
               )}
             </div>
           )}
-          <button
-            onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; onShare(); }}
-            className="toolbar-btn bottom"
-            title="Share Canvas"
-            tabIndex={0}
-            onMouseEnter={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '1'; }}
-            onMouseLeave={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
-            onBlur={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; }}
-          >
-            <span className="toolbar-btn-icon bottom"><Share2 size={20} /></span>
-            <span className="toolbar-tooltip" style={{opacity: 0, transition: 'opacity 0.12s'}}>Share Canvas</span>
-          </button>
+          <div className="toolbar-btn-container">
+            <ShareButton className="toolbar-btn bottom" />
+          </div>
           {/* Export/Import */}
           <button
             onClick={e => { const tooltip = e.currentTarget.querySelector('.toolbar-tooltip'); if (tooltip) tooltip.style.opacity = '0'; onExport(); }}

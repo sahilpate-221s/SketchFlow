@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { AuthProvider } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
@@ -11,9 +11,10 @@ import NotFound from './pages/NotFound'
 import { useAuth } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 // import ThemeToggle from './components/ThemeToggle'
+import React from 'react'
 
-// Custom route component for board access
-const BoardRoute = ({ children }) => {
+// Update the BoardRoute component to handle different access modes
+const BoardRoute = ({ children, mode = 'edit' }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -25,9 +26,21 @@ const BoardRoute = ({ children }) => {
     );
   }
 
-  // Allow access if user is authenticated or if trying to access a public diagram
-  // The actual access control will be handled by the server
-  return children;
+  // Clone the children and pass the mode prop
+  const childrenWithProps = React.Children.map(children, child => {
+    if (React.isValidElement(child)) {
+      return React.cloneElement(child, { mode });
+    }
+    return child;
+  });
+
+  return childrenWithProps;
+};
+
+// Add a component to handle the legacy route redirect
+const LegacyBoardRedirect = () => {
+  const { id } = useParams();
+  return <Navigate to={`/diagram/${id}/edit`} replace />;
 };
 
 const App = () => {
@@ -54,13 +67,29 @@ const App = () => {
                       </PrivateRoute>
                     }
                   />
+
+                  {/* Diagram routes with different access modes */}
                   <Route
-                    path="/board/:id"
+                    path="/diagram/:id/edit"
                     element={
-                      <BoardRoute>
+                      <BoardRoute mode="edit">
                         <Board />
                       </BoardRoute>
                     }
+                  />
+                  <Route
+                    path="/diagram/:id/view"
+                    element={
+                      <BoardRoute mode="view">
+                        <Board />
+                      </BoardRoute>
+                    }
+                  />
+                  
+                  {/* Legacy board route - redirect to edit mode */}
+                  <Route
+                    path="/board/:id"
+                    element={<LegacyBoardRedirect />}
                   />
 
                   {/* Fallback routes */}

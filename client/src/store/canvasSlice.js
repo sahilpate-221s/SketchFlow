@@ -10,7 +10,7 @@ const initialState = {
   tool: 'select', // select, rectangle, circle, line, arrow, text, freehand
   strokeStyle: 'solid', // solid, dashed
   strokeWidth: 2,
-  strokeColor: '#000000',
+  strokeColor: '#ffffff',
   fillColor: '#ffffff',
   fontSize: 16,
   fontFamily: 'Handlee',

@@ -22,7 +22,7 @@ import { useDiagram } from '../hooks/useDiagram';
 import { Share2, Users, Lock, Unlock, LogIn } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
-const Board = () => {
+const Board = ({ mode = 'edit' }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -60,12 +60,13 @@ const Board = () => {
 
   // Check if user has edit access
   const hasEditAccess = useMemo(() => {
+    if (mode === 'view') return false;
     if (!isAuthenticated || !diagram) return false;
     const ownerId = diagram.owner ? diagram.owner.toString() : null;
     const userId = user?._id ? user._id.toString() : null;
     if (!ownerId || !userId) return false;
     return ownerId === userId || diagram.collaborators.some(c => c.user && c.user.toString() === userId && c.role === 'editor');
-  }, [isAuthenticated, diagram, user]);
+  }, [isAuthenticated, diagram, user, mode]);
 
   // Handle diagram updates
   const handleDiagramUpdate = useCallback((updates) => {
@@ -305,34 +306,36 @@ const Board = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Main Canvas */}
-      <Canvas stageRef={stageRef} />
+      <Canvas readOnly={!hasEditAccess} />
 
-      {/* Toolbar */}
-      <Toolbar
-        onExport={() => dispatch({ type: 'canvas/exportCanvas' })}
-        onImport={(e) => {
-          const file = e.target.files[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              try {
-                const data = JSON.parse(event.target.result);
-                dispatch({ type: 'canvas/importCanvas', payload: data });
-              } catch (error) {
-                console.error('Error importing canvas:', error);
-              }
-            };
-            reader.readAsText(file);
-          }
-        }}
-        onShare={handleShare}
-        collaborators={collaborators}
-        onGridToggle={handleGridToggle}
-        isGridVisible={isGridVisible}
-      />
+      {/* Toolbar - only show if user has edit access */}
+      {hasEditAccess && (
+        <Toolbar
+          onExport={() => dispatch({ type: 'canvas/exportCanvas' })}
+          onImport={(e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                try {
+                  const data = JSON.parse(event.target.result);
+                  dispatch({ type: 'canvas/importCanvas', payload: data });
+                } catch (error) {
+                  console.error('Error importing canvas:', error);
+                }
+              };
+              reader.readAsText(file);
+            }
+          }}
+          onShare={handleShare}
+          collaborators={collaborators}
+          onGridToggle={handleGridToggle}
+          isGridVisible={isGridVisible}
+        />
+      )}
 
-      {/* Share Dialog */}
-      {showShareDialog && (
+      {/* Share Dialog - only show if user has edit access */}
+      {hasEditAccess && showShareDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Share Canvas</h2>

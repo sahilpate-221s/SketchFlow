@@ -559,7 +559,11 @@ const Canvas = ({ readOnly = false }) => {
       type: tool,
       x: pointToUse.x,
       y: pointToUse.y,
-      stroke: ["freehand", "line", "arrow"].includes(tool) ? "#fff" : strokeColor,
+      stroke: ["freehand", "line", "arrow"].includes(tool)
+        ? "#fff"
+        : (tool === "text" && (strokeColor.toLowerCase() === "#000000" || strokeColor.toLowerCase() === "#000")
+          ? "#fff"
+          : strokeColor),
       strokeWidth: tool === "freehand" ? 3 : strokeWidth,
       strokeStyle: tool === "freehand" ? "solid" : strokeStyle,
       fill: tool === "sticky" ? "#4b4b3f" : fillColor,
@@ -1126,34 +1130,44 @@ const Canvas = ({ readOnly = false }) => {
     }
   }, [selectedIds, shapes]);
 
-  // --- TOOL/CURSOR TRANSITIONS POLISH ---
-useEffect(() => {
-  if (stageRef.current) {
-    if (tool === "eraser") {
-      // Modern, angled rectangle eraser SVG as cursor
-      const eraserSVG = encodeURIComponent(
-        `<svg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='7' y='20' width='18' height='8' rx='2' fill='%23f3f4f6' stroke='%2323232b' stroke-width='2' transform='rotate(-25 7 20)'/><rect x='11' y='7' width='12' height='12' rx='3' fill='%2323232b' stroke='%23f3f4f6' stroke-width='2' transform='rotate(-25 11 7)'/></svg>`
-      );
-      stageRef.current.container().style.cursor = `url('data:image/svg+xml,${eraserSVG}') 8 28, auto`;
-    } else {
-      stageRef.current.container().style.cursor = {
-        select: "default",
-        rectangle: "crosshair",
-        circle: "crosshair",
-        line: "crosshair",
-        arrow: "crosshair",
-        freehand: "crosshair",
-        text: "text",
-        sticky: "crosshair",
-        markdown: "crosshair",
-        pan: "grab",
-      }[tool] || "default";
+  // Update the cursor style effect
+  useEffect(() => {
+    if (stageRef.current) {
+      if (tool === "eraser") {
+        // Create a smaller, box-like eraser cursor SVG
+        const eraserSVG = encodeURIComponent(`
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Simple box eraser with a slight angle -->
+            <rect x="4" y="8" width="12" height="8" rx="1" 
+                  fill="#f3f4f6" 
+                  stroke="#23232b" 
+                  stroke-width="1.5"
+                  transform="rotate(-15 10 12)"/>
+            <!-- Small grip detail -->
+            <rect x="6" y="10" width="8" height="4" rx="0.5" 
+                  fill="#23232b" 
+                  stroke="#f3f4f6" 
+                  stroke-width="1"
+                  transform="rotate(-15 10 12)"/>
+          </svg>
+        `);
+        stageRef.current.container().style.cursor = `url('data:image/svg+xml,${eraserSVG}') 6 6, auto`;
+      } else {
+        stageRef.current.container().style.cursor = {
+          select: "default",
+          rectangle: "crosshair",
+          circle: "crosshair",
+          line: "crosshair",
+          arrow: "crosshair",
+          freehand: "crosshair",
+          text: "text",
+          sticky: "crosshair",
+          markdown: "crosshair",
+          pan: "grab",
+        }[tool] || "default";
+      }
     }
-  }
-}, [tool]);
-
-  // --- CLEANUP: Remove debug logs ---
-  // Remove all console.log calls throughout the file
+  }, [tool]);
 
   // Update undo/redo functionality
   useEffect(() => {

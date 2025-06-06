@@ -1,59 +1,91 @@
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
-import { 
-  socket, 
-  connectSocket, 
-  disconnectSocket,
-  joinDiagram as joinDiagramSocket,
-  leaveDiagram as leaveDiagramSocket,
-  emitShapeAdd,
-  emitShapeUpdate,
-  emitShapeDelete,
-  emitCursorMove,
-  emitViewUpdate,
-} from '../socket';
 
 const SocketContext = createContext(null);
 
-export const useSocket = () => {
-  const context = useContext(SocketContext);
-  if (!context) {
-    throw new Error('useSocket must be used within a SocketProvider');
-  }
-  return context;
-};
-
 export const SocketProvider = ({ children }) => {
-  const { user, token } = useAuth();
+  const [socket, setSocket] = useState(null);
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (token) {
-      // Connect socket when user is authenticated
-      connectSocket(token);
-    } else {
-      // Disconnect socket when user logs out
-      disconnectSocket();
+    // Create socket instance with configuration
+    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+      autoConnect: false,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      auth: {
+        token: localStorage.getItem('token')
+      }
+    });
+
+    // Connect socket when user is authenticated
+    if (isAuthenticated && user?.role !== 'guest') {
+      newSocket.connect();
     }
 
-    // Cleanup on unmount
+    setSocket(newSocket);
+
     return () => {
-      disconnectSocket();
+      if (newSocket) {
+        newSocket.disconnect();
+      }
     };
-  }, [token]);
+  }, [isAuthenticated, user]);
+
+  const joinDiagram = (diagramId) => {
+    if (!socket) return;
+    
+    socket.emit('joinDiagram', {
+      diagramId,
+      user: {
+        id: user?._id,
+        name: user?.email || 'Guest',
+        role: user?.role || 'guest'
+      }
+    });
+  };
+
+  const leaveDiagram = (diagramId) => {
+    if (!socket) return;
+    socket.emit('leaveDiagram', { diagramId, userId: user?._id });
+  };
+
+  const emitShapeAdd = (diagramId, shape) => {
+    if (!socket) return;
+    socket.emit('shapeAdd', { diagramId, shape });
+  };
+
+  const emitShapeUpdate = (diagramId, shape) => {
+    if (!socket) return;
+    socket.emit('shapeUpdate', { diagramId, shape });
+  };
+
+  const emitShapeDelete = (diagramId, ids) => {
+    if (!socket) return;
+    socket.emit('shapeDelete', { diagramId, ids });
+  };
+
+  const emitViewUpdate = (diagramId, { zoom, position }) => {
+    if (!socket) return;
+    socket.emit('viewUpdate', { diagramId, zoom, position });
+  };
+
+  const emitCursorMove = (diagramId, data) => {
+    if (!socket) return;
+    socket.emit('cursorUpdate', { diagramId, ...data });
+  };
 
   const value = {
     socket,
-    isConnected: socket?.connected || false,
-    // Diagram room functions
-    joinDiagram: (diagramId) => joinDiagramSocket(diagramId, user),
-    leaveDiagram: (diagramId) => leaveDiagramSocket(diagramId, user?._id),
-    // Shape functions
+    joinDiagram,
+    leaveDiagram,
     emitShapeAdd,
     emitShapeUpdate,
     emitShapeDelete,
-    // Collaboration functions
-    emitCursorMove,
     emitViewUpdate,
+    emitCursorMove
   };
 
   return (
@@ -61,4 +93,12 @@ export const SocketProvider = ({ children }) => {
       {children}
     </SocketContext.Provider>
   );
+};
+
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) {
+    throw new Error('useSocket must be used within a SocketProvider');
+  }
+  return context;
 }; 
