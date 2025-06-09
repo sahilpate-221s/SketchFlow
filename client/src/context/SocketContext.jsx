@@ -34,7 +34,7 @@ export const SocketProvider = ({ children }) => {
     };
   }, [isAuthenticated, user]);
 
-  const joinDiagram = (diagramId) => {
+  const joinDiagram = (diagramId, mode = 'view') => {
     if (!socket) return;
     
     socket.emit('joinDiagram', {
@@ -42,7 +42,7 @@ export const SocketProvider = ({ children }) => {
       user: {
         id: user?._id,
         name: user?.email || 'Guest',
-        role: user?.role || 'guest'
+        role: mode === 'edit' ? 'editor' : 'viewer'
       }
     });
   };

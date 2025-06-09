@@ -893,7 +893,7 @@ const Canvas = ({ readOnly = false }) => {
               className="border border-gray-300 rounded p-1 bg-[#181818] shadow-lg min-w-[100px] min-h-[24px] resize-none"
               style={{
                 fontSize: `${shape.fontSize || 16}px`,
-                color: shape.stroke || "#000",
+                color: "#fff",
                 width:
                   shape.type === "sticky" ? `${shape.width - 20}px` : "auto",
                 height:
@@ -1204,11 +1204,16 @@ const Canvas = ({ readOnly = false }) => {
       <MarkdownNotesPanel
         isOpen={isMarkdownPanelOpen}
         panelRef={markdownPanelRef}
-        editingId={editingMarkdownId}
-        editingValue={editingMarkdownValue}
-        setEditingId={setEditingMarkdownId}
-        setEditingValue={setEditingMarkdownValue}
-        onSave={handleMarkdownSave}
+        editingMarkdownId={editingMarkdownId}
+        editingMarkdownValue={editingMarkdownValue}
+        setEditingMarkdownId={setEditingMarkdownId}
+        setEditingMarkdownValue={setEditingMarkdownValue}
+        handleMarkdownSave={handleMarkdownSave}
+        onClose={() => {
+          setIsMarkdownPanelOpen(false);
+          setEditingMarkdownId(null);
+          setEditingMarkdownValue('');
+        }}
         shapes={shapes}
         dispatch={dispatch}
       />
@@ -1303,7 +1308,7 @@ const Canvas = ({ readOnly = false }) => {
           onMouseUp={handleMouseUp}
           onWheel={handleWheel}
           draggable={isPanning}
-          className="bg-transparent pointer-events-auto"
+          className={`bg-transparent ${isMarkdownPanelOpen || isMarkdownEditorOpen ? 'pointer-events-none' : 'pointer-events-auto'}`}
         >
           {/* Grid Layer - Infinite grid */}
           <GridLayer

@@ -64,12 +64,17 @@ const initializeSocket = (server) => {
           return;
         }
 
+        // Determine role from user info or default to guest
+        const requestedRole = user?.role || 'guest';
+
         // Check access permissions
         const hasAccess = diagram.isPublic || 
           (socket.userId && (
             diagram.owner.toString() === socket.userId.toString() ||
             diagram.collaborators.some(c => c.user.toString() === socket.userId.toString())
-          ));
+          )) || 
+          // Allow guest access if requested role is viewer or editor (from URL)
+          (socket.isGuest && (requestedRole === 'viewer' || requestedRole === 'editor'));
 
         if (!hasAccess) {
           socket.emit('error', 'Access denied');
@@ -107,7 +112,7 @@ const initializeSocket = (server) => {
           position: { x: 0, y: 0 },
           color: getRandomColor(),
           name: user?.name || socket.user?.email || 'Guest',
-          role: user?.role || 'guest'
+          role: requestedRole
         };
 
         users.set(socket.id, userInfo);

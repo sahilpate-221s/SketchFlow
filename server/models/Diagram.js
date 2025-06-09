@@ -50,6 +50,12 @@ const diagramSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  shareToken: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
   lastEditedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

@@ -34,7 +34,11 @@ const ShareButton = ({ className = '' }) => {
 
   const getShareUrl = (mode) => {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/diagram/${id}/${mode}`;
+    const url = new URL(`${baseUrl}/diagram/${id}/${mode}`);
+    if (shareToken) {
+      url.searchParams.set('shareToken', shareToken);
+    }
+    return url.toString();
   };
 
   return (

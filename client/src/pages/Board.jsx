@@ -38,6 +38,8 @@ const Board = ({ mode = 'edit' }) => {
   const [shareEmail, setShareEmail] = useState('');
   const [shareRole, setShareRole] = useState('viewer');
   const [shareError, setShareError] = useState('');
+  const searchParams = new URLSearchParams(window.location.search);
+  const shareToken = searchParams.get('shareToken');
 
   const {
     diagram,
@@ -45,7 +47,7 @@ const Board = ({ mode = 'edit' }) => {
     error: diagramError,
     updateDiagram,
     shareDiagram,
-  } = useDiagram(id);
+  } = useDiagram(id, shareToken);
 
   const {
     tool,
@@ -127,7 +129,7 @@ const Board = ({ mode = 'edit' }) => {
   useEffect(() => {
     if (!socket || !id) return;
 
-    joinDiagram(id);
+    joinDiagram(id, mode, shareToken);
 
     socket.on('diagram-update', (updates) => {
       dispatch(updateDiagram(updates));
@@ -156,7 +158,7 @@ const Board = ({ mode = 'edit' }) => {
       socket.off('user-left');
       socket.off('grid-update');
     };
-  }, [socket, id, dispatch, joinDiagram, leaveDiagram]);
+  }, [socket, id, mode, shareToken, dispatch, joinDiagram, leaveDiagram]);
 
   // Handle grid visibility changes
   const handleGridToggle = useCallback(() => {

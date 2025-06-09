@@ -51,10 +51,16 @@ router.get('/:id', auth, validation.validateObjectId, async (req, res) => {
       return res.status(404).json({ error: 'Diagram not found' });
     }
 
-    // Check if user has access
+    const shareToken = req.query.shareToken;
+
+    // Defensive check for collaborators array
+    const collaborators = Array.isArray(diagram.collaborators) ? diagram.collaborators : [];
+
+    // Check if user has access or valid share token
     if (!diagram.isPublic && 
         diagram.owner.toString() !== req.user._id.toString() && 
-        !diagram.collaborators.some(c => c.user.toString() === req.user._id.toString())) {
+        !collaborators.some(c => c.user.toString() === req.user._id.toString()) &&
+        diagram.shareToken !== shareToken) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -165,6 +171,8 @@ router.delete('/:id/collaborators/:userId', auth, validation.validateObjectId, a
 });
 
 // Share diagram (generate shareable link)
+const crypto = require('crypto');
+
 router.post('/:id/share', auth, validation.validateObjectId, async (req, res) => {
   try {
     const diagram = await Diagram.findById(req.params.id);
@@ -179,11 +187,17 @@ router.post('/:id/share', auth, validation.validateObjectId, async (req, res) =>
 
     const { isPublic } = req.body;
     diagram.isPublic = isPublic;
+
+    // Generate share token if not exists
+    if (!diagram.shareToken) {
+      diagram.shareToken = crypto.randomBytes(16).toString('hex');
+    }
+
     await diagram.save();
 
     res.json({
       diagram,
-      shareableLink: isPublic ? `/board/${diagram._id}` : null,
+      shareableLink: isPublic ? `/diagram/${diagram._id}?shareToken=${diagram.shareToken}` : null,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

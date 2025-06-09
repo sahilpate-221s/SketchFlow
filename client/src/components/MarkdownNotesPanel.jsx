@@ -86,13 +86,15 @@ const MarkdownNotesPanel = ({
                   setEditingMarkdownId(null);
                   setEditingMarkdownValue('');
                 }}
-                className="px-3 py-1.5 text-sm rounded-lg bg-gray-100/95 text-gray-400 hover:bg-gray-200/95"
+                className="px-3 py-1.5 text-sm rounded-lg bg-gradient-to-br from-neutral-800 via-neutral-900 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-700 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
+                style={{ cursor: 'pointer' }}
               >
                 Clear
               </button>
               <button
                 onClick={handleMarkdownSave}
-                className="px-3 py-1.5 text-sm rounded-lg bg-blue-600/95 text-white hover:bg-blue-700/95"
+                className="px-3 py-1.5 text-sm rounded-lg bg-gradient-to-br from-neutral-700 via-neutral-800 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-600 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
+                style={{ cursor: 'pointer' }}
               >
                 {editingMarkdownId ? 'Update Note' : 'Add Note'}
               </button>
@@ -107,7 +109,7 @@ const MarkdownNotesPanel = ({
               .map(note => (
                 <div
                   key={note.id}
-                  className="mb-3 p-3 rounded-lg border border-gray-800/90 bg-[#181818]/95 hover:bg-gray-50/95 transition-colors"
+                  className="mb-3 p-3 rounded-lg border border-gray-800/90 bg-[#181818]/95 transition-colors hover:text-white"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="text-sm text-gray-500">
@@ -137,7 +139,7 @@ const MarkdownNotesPanel = ({
                       </button>
                     </div>
                   </div>
-                  <div className="prose prose-sm max-w-none text-black">
+                  <div className="prose prose-sm max-w-none text-gray-300">
                     <ReactMarkdown>{note.text}</ReactMarkdown>
                   </div>
                 </div>
