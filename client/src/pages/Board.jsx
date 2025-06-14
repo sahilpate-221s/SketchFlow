@@ -16,11 +16,13 @@ import {
   addCollaborator,
   removeCollaborator,
   updateCollaboratorPosition,
+  loadCanvas,
 } from '../store/canvasSlice';
 import { useAuth } from '../context/AuthContext';
 import { useDiagram } from '../hooks/useDiagram';
 import { Share2, Users, Lock, Unlock, LogIn } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import { store } from '../store';
 
 const Board = ({ mode = 'edit' }) => {
   const { id } = useParams();
@@ -38,6 +40,7 @@ const Board = ({ mode = 'edit' }) => {
   const [shareEmail, setShareEmail] = useState('');
   const [shareRole, setShareRole] = useState('viewer');
   const [shareError, setShareError] = useState('');
+  const [isCanvasSaving, setIsCanvasSaving] = useState(false);
   const searchParams = new URLSearchParams(window.location.search);
   const shareToken = searchParams.get('shareToken');
 
@@ -58,17 +61,58 @@ const Board = ({ mode = 'edit' }) => {
     collaborators,
   } = useSelector((state) => state.canvas);
 
+  // Get shapes and stickyNotes for auto-save
+  const { shapes, stickyNotes } = useSelector((state) => state.canvas);
+
   const { socket, joinDiagram, leaveDiagram } = useSocket();
 
   // Check if user has edit access
   const hasEditAccess = useMemo(() => {
     if (mode === 'view') return false;
-    if (!isAuthenticated || !diagram) return false;
-    const ownerId = diagram.owner ? diagram.owner.toString() : null;
-    const userId = user?._id ? user._id.toString() : null;
-    if (!ownerId || !userId) return false;
-    return ownerId === userId || diagram.collaborators.some(c => c.user && c.user.toString() === userId && c.role === 'editor');
-  }, [isAuthenticated, diagram, user, mode]);
+    if (!diagram) return false;
+    
+    // If diagram is public and user has share token, allow edit access
+    if (diagram.isPublic && shareToken) return true;
+    
+    // If user is authenticated, check ownership and collaboration
+    if (isAuthenticated && user) {
+      const ownerId = diagram.owner ? diagram.owner.toString() : null;
+      const userId = user._id ? user._id.toString() : null;
+      if (ownerId && userId && ownerId === userId) return true;
+      
+      // Check if user is an editor collaborator
+      return diagram.collaborators.some(c => 
+        c.user && c.user.toString() === userId && c.role === 'editor'
+      );
+    }
+    
+    return false;
+  }, [isAuthenticated, diagram, user, mode, shareToken]);
+
+  // Check if user has view access
+  const hasViewAccess = useMemo(() => {
+    if (!diagram) return false;
+    
+    // If diagram is public, allow view access
+    if (diagram.isPublic) return true;
+    
+    // If user is authenticated, check ownership and collaboration
+    if (isAuthenticated && user) {
+      const ownerId = diagram.owner ? diagram.owner.toString() : null;
+      const userId = user._id ? user._id.toString() : null;
+      if (ownerId && userId && ownerId === userId) return true;
+      
+      // Check if user is a collaborator (viewer or editor)
+      return diagram.collaborators.some(c => 
+        c.user && c.user.toString() === userId
+      );
+    }
+    
+    // If user has share token, allow view access
+    if (shareToken) return true;
+    
+    return false;
+  }, [isAuthenticated, diagram, user, shareToken]);
 
   // Handle diagram updates
   const handleDiagramUpdate = useCallback((updates) => {
@@ -86,6 +130,33 @@ const Board = ({ mode = 'edit' }) => {
       setError('Failed to share diagram');
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  // Manual save function
+  const handleManualSave = async () => {
+    if (!diagram || !hasEditAccess || !isAuthenticated) return;
+
+    try {
+      setIsCanvasSaving(true);
+      const currentState = store.getState().canvas;
+      
+      await updateDiagram({
+        canvas: {
+          shapes: currentState.shapes,
+          stickyNotes: currentState.stickyNotes,
+          markdown: {
+            content: currentState.markdownContent,
+            lastEdited: new Date(),
+          },
+        },
+      });
+      console.log('Canvas data manually saved to database');
+    } catch (err) {
+      console.error('Failed to manually save canvas data:', err);
+      setError('Failed to save canvas data');
+    } finally {
+      setIsCanvasSaving(false);
     }
   };
 
@@ -110,20 +181,32 @@ const Board = ({ mode = 'edit' }) => {
     }
   };
 
-  // Load diagram data
+  // Load diagram data and initialize canvas state
   useEffect(() => {
     if (diagram) {
       // Update canvas state with diagram data
       if (diagram.canvas) {
-        // Update shapes, sticky notes, etc.
-        // This will be implemented in the canvas slice
+        // Load all canvas data from database
+        dispatch(loadCanvas({
+          shapes: diagram.canvas.shapes || [],
+          stickyNotes: diagram.canvas.stickyNotes || [],
+          markdownContent: diagram.canvas.markdown?.content || '',
+        }));
       }
-      if (diagram.canvas?.markdown?.content) {
-        dispatch(updateMarkdownContent(diagram.canvas.markdown.content));
+      
+      // Ensure we have a default tool selected
+      if (!tool) {
+        dispatch(setTool('select'));
       }
+      
+      // Ensure we have a default zoom
+      if (!zoom || zoom === 0) {
+        dispatch(setZoom(1));
+      }
+      
       setIsLoading(false);
     }
-  }, [diagram, dispatch]);
+  }, [diagram, dispatch, tool, zoom]);
 
   // Socket connection and collaboration
   useEffect(() => {
@@ -175,9 +258,9 @@ const Board = ({ mode = 'edit' }) => {
     }
   }, [socket, id, isGridVisible, dispatch]);
 
-  // Save diagram changes (only for authenticated users with edit access)
+  // Auto-save canvas data when shapes or sticky notes change
   useEffect(() => {
-    if (!diagram || isLoading || !isAuthenticated) return;
+    if (!diagram || !hasEditAccess || !isAuthenticated) return;
 
     const isOwner = diagram.owner && user && diagram.owner.toString && user._id && user._id.toString && diagram.owner.toString() === user._id.toString();
     const isEditor = Array.isArray(diagram.collaborators) && user && user._id && user._id.toString && diagram.collaborators.some(
@@ -188,23 +271,30 @@ const Board = ({ mode = 'edit' }) => {
 
     const saveTimeout = setTimeout(async () => {
       try {
+        setIsCanvasSaving(true);
+        // Get current canvas state from Redux
+        const currentState = store.getState().canvas;
+        
         await updateDiagram({
           canvas: {
-            shapes: diagram.canvas.shapes,
-            stickyNotes: diagram.canvas.stickyNotes,
+            shapes: currentState.shapes,
+            stickyNotes: currentState.stickyNotes,
             markdown: {
-              content: markdownContent,
+              content: currentState.markdownContent,
               lastEdited: new Date(),
             },
           },
         });
+        console.log('Canvas data auto-saved to database');
       } catch (err) {
-        console.error('Failed to save diagram:', err);
+        console.error('Failed to auto-save canvas data:', err);
+      } finally {
+        setIsCanvasSaving(false);
       }
-    }, 1000); // Debounce save for 1 second
+    }, 2000); // Auto-save every 2 seconds after changes
 
     return () => clearTimeout(saveTimeout);
-  }, [diagram, isLoading, isAuthenticated, user, markdownContent, updateDiagram]);
+  }, [shapes, stickyNotes, markdownContent, diagram, hasEditAccess, isAuthenticated, user, updateDiagram]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -227,6 +317,10 @@ const Board = ({ mode = 'edit' }) => {
           case 'v':
             e.preventDefault();
             dispatch({ type: 'canvas/pasteFromClipboard' });
+            break;
+          case 's':
+            e.preventDefault();
+            handleManualSave();
             break;
           case 'e':
             e.preventDefault();
@@ -273,7 +367,38 @@ const Board = ({ mode = 'edit' }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dispatch, isGridVisible]);
+  }, [dispatch, isGridVisible, handleManualSave]);
+
+  // Determine if we should show toolbars - be more permissive to prevent black screen
+  const shouldShowToolbars = hasEditAccess || (diagram && diagram.isPublic) || shareToken;
+
+  // Add a small delay to ensure everything is properly loaded
+  const [isFullyLoaded, setIsFullyLoaded] = useState(false);
+  
+  useEffect(() => {
+    if (!diagramLoading && !isLoading && diagram) {
+      const timer = setTimeout(() => {
+        setIsFullyLoaded(true);
+      }, 100); // Small delay to ensure state is properly initialized
+      
+      return () => clearTimeout(timer);
+    }
+  }, [diagramLoading, isLoading, diagram]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Board state:', {
+      diagramLoading,
+      isLoading,
+      diagram: !!diagram,
+      hasEditAccess,
+      hasViewAccess,
+      shouldShowToolbars,
+      isFullyLoaded,
+      mode,
+      shareToken
+    });
+  }, [diagramLoading, isLoading, diagram, hasEditAccess, hasViewAccess, shouldShowToolbars, isFullyLoaded, mode, shareToken]);
 
   if (diagramLoading || isLoading) {
     return (
@@ -282,6 +407,31 @@ const Board = ({ mode = 'edit' }) => {
           {/* <ThemeToggle /> */}
         </div>
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 dark:border-blue-400" />
+      </div>
+    );
+  }
+
+  // Check access before rendering
+  if (diagram && !hasViewAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-matte-black">
+        <div className="absolute top-4 right-4">
+          {/* <ThemeToggle /> */}
+        </div>
+        <div className="text-center">
+          <div className="text-red-500 dark:text-red-400 text-lg mb-4">
+            Access Denied
+          </div>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            You don't have permission to view this diagram.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700"
+          >
+            Return Home
+          </button>
+        </div>
       </div>
     );
   }
@@ -310,8 +460,8 @@ const Board = ({ mode = 'edit' }) => {
       {/* Main Canvas */}
       <Canvas readOnly={!hasEditAccess} />
 
-      {/* Toolbar - only show if user has edit access */}
-      {hasEditAccess && (
+      {/* Toolbar - show if user has edit access or if it's a public diagram */}
+      {(shouldShowToolbars || isFullyLoaded) && (
         <Toolbar
           onExport={() => dispatch({ type: 'canvas/exportCanvas' })}
           onImport={(e) => {

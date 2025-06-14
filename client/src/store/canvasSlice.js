@@ -421,6 +421,32 @@ const canvasSlice = createSlice({
     setTextAlign: (state, action) => {
       state.textAlign = action.payload;
     },
+
+    // Load canvas data from database (without affecting history)
+    loadShapes: (state, action) => {
+      state.shapes = action.payload;
+      // Don't add to history when loading from database
+    },
+
+    loadStickyNotes: (state, action) => {
+      state.stickyNotes = action.payload;
+      // Don't add to history when loading from database
+    },
+
+    // Load entire canvas state from database
+    loadCanvas: (state, action) => {
+      const { shapes, stickyNotes, markdownContent } = action.payload;
+      if (shapes) state.shapes = shapes;
+      if (stickyNotes) state.stickyNotes = stickyNotes;
+      if (markdownContent) state.markdownContent = markdownContent;
+      // Don't add to history when loading from database
+    },
+
+    // Save canvas state to database (this is a thunk action)
+    saveCanvas: () => {
+      // This will be handled by the Board component
+      // We don't modify state here, just return the current state
+    },
   },
 });
 
@@ -460,6 +486,10 @@ export const {
   setIsPanning,
   setLastMousePosition,
   updateCanvas,
+  loadShapes,
+  loadStickyNotes,
+  loadCanvas,
+  saveCanvas,
 } = canvasSlice.actions;
 
 export default canvasSlice.reducer; 

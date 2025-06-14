@@ -67,14 +67,14 @@ const initializeSocket = (server) => {
         // Determine role from user info or default to guest
         const requestedRole = user?.role || 'guest';
 
-        // Check access permissions
+        // Check access permissions - allow public access or authenticated users
         const hasAccess = diagram.isPublic || 
           (socket.userId && (
             diagram.owner.toString() === socket.userId.toString() ||
             diagram.collaborators.some(c => c.user.toString() === socket.userId.toString())
           )) || 
-          // Allow guest access if requested role is viewer or editor (from URL)
-          (socket.isGuest && (requestedRole === 'viewer' || requestedRole === 'editor'));
+          // Allow guest access for public diagrams or if user has share token
+          (socket.isGuest && (diagram.isPublic || requestedRole === 'viewer' || requestedRole === 'editor'));
 
         if (!hasAccess) {
           socket.emit('error', 'Access denied');
@@ -131,7 +131,7 @@ const initializeSocket = (server) => {
           users: Array.from(users.entries())
         });
 
-        console.log(`User ${socket.id} joined diagram ${diagramId}`);
+        console.log(`User ${socket.id} joined diagram ${diagramId} as ${requestedRole}`);
       } catch (error) {
         console.error('Error joining diagram:', error);
         socket.emit('error', 'Error joining diagram');

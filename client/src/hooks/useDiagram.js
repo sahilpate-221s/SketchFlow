@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from '../utils/axios';
 import { useNavigate } from 'react-router-dom';
 
-export const useDiagram = (diagramId) => {
+export const useDiagram = (diagramId, shareToken = null) => {
   const [diagram, setDiagram] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,7 +26,14 @@ export const useDiagram = (diagramId) => {
       try {
         setLoading(true);
         setError(null);
-        const response = await axios.get(`/api/diagrams/${encodeURIComponent(diagramId)}`);
+        
+        // Build URL with share token if provided
+        let url = `/api/diagrams/${encodeURIComponent(diagramId)}`;
+        if (shareToken) {
+          url += `?shareToken=${encodeURIComponent(shareToken)}`;
+        }
+        
+        const response = await axios.get(url);
         setDiagram(response.data);
       } catch (err) {
         console.error('Error fetching diagram:', err);
@@ -40,7 +47,7 @@ export const useDiagram = (diagramId) => {
     };
 
     fetchDiagram();
-  }, [diagramId, navigate]);
+  }, [diagramId, shareToken, navigate]);
 
   // Update diagram
   const updateDiagram = async (updates) => {

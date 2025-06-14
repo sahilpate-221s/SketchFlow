@@ -7,8 +7,10 @@ const CollaboratorCursors = ({ collaboratorCursors = {}, shapes = [], selectedId
     <>
       {Object.entries(collaboratorCursors).map(([userId, data]) => {
         const { position, user, lastUpdate, selection, tool } = data;
-        const isActive = Date.now() - lastUpdate < 1000;
+        const isActive = Date.now() - lastUpdate < 2000; // Show for 2 seconds
         const isSelecting = tool === 'select' && selection?.length > 0;
+
+        if (!position || !user) return null;
 
         return (
           <Group key={userId} x={position.x} y={position.y}>

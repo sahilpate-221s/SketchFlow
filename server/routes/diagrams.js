@@ -70,6 +70,25 @@ router.get('/:id', auth, validation.validateObjectId, async (req, res) => {
   }
 });
 
+// Get diagram sharing info (public route)
+router.get('/:id/share-info', validation.validateObjectId, async (req, res) => {
+  try {
+    const diagram = await Diagram.findById(req.params.id);
+    if (!diagram) {
+      return res.status(404).json({ error: 'Diagram not found' });
+    }
+
+    // Only return sharing info, not the full diagram
+    res.json({
+      isPublic: diagram.isPublic,
+      shareToken: diagram.shareToken,
+      hasShareToken: !!diagram.shareToken
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update a diagram
 router.patch('/:id', auth, validation.validateObjectId, async (req, res) => {
   try {

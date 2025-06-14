@@ -21,6 +21,7 @@ import {
   setIsDragging,
   setIsPanning,
   setLastMousePosition,
+  setGridVisible,
 } from "../store/canvasSlice";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSocket } from "../context/SocketContext";
@@ -93,6 +94,14 @@ const Canvas = ({ readOnly = false }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, [stageWidth, stageHeight]);
 
+  // Ensure stage dimensions are never 0
+  useEffect(() => {
+    if (stageWidth === 0 || stageHeight === 0) {
+      setStageWidth(Math.max(window.innerWidth * 2, 1200));
+      setStageHeight(Math.max(window.innerHeight * 2, 800));
+    }
+  }, [stageWidth, stageHeight]);
+
   const {
     shapes,
     selectedIds,
@@ -114,6 +123,11 @@ const Canvas = ({ readOnly = false }) => {
     canRedo,
   } = useSelector((state) => state.canvas);
 
+  // Add fallback values to prevent undefined states
+  const safeZoom = zoom || 1;
+  const safeTool = tool || 'select';
+  const safeIsGridVisible = typeof isGridVisible === 'boolean' ? isGridVisible : false;
+
   // Add grid rendering constants
   const GRID_SIZE = 20; // Size of each grid cell
   const GRID_EXTENSION = 2000; // How far to extend the grid beyond the visible area
@@ -122,6 +136,47 @@ const Canvas = ({ readOnly = false }) => {
   useEffect(() => {
     console.log("Undo/Redo state:", { canUndo, canRedo });
   }, [canUndo, canRedo]);
+
+  // Ensure we have a default tool selected
+  useEffect(() => {
+    if (!safeTool) {
+      dispatch(setTool('select'));
+    }
+  }, [safeTool, dispatch]);
+
+  // Ensure we have a default zoom
+  useEffect(() => {
+    if (!safeZoom || safeZoom === 0) {
+      dispatch(setZoom(1));
+    }
+  }, [safeZoom, dispatch]);
+
+  // Initialize canvas state on mount
+  useEffect(() => {
+    // Ensure we have proper initial state
+    if (!safeTool) {
+      dispatch(setTool('select'));
+    }
+    if (!safeZoom || safeZoom === 0) {
+      dispatch(setZoom(1));
+    }
+    if (typeof safeIsGridVisible !== 'boolean') {
+      dispatch(setGridVisible(false));
+    }
+  }, [dispatch, safeTool, safeZoom, safeIsGridVisible]);
+
+  // Ensure canvas is properly initialized
+  useEffect(() => {
+    // Force a re-render if stage dimensions are not set
+    if (stageWidth === 0 || stageHeight === 0) {
+      const timer = setTimeout(() => {
+        setStageWidth(Math.max(window.innerWidth * 2, 1200));
+        setStageHeight(Math.max(window.innerHeight * 2, 800));
+      }, 50);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [stageWidth, stageHeight]);
 
   // Initialize socket events
   useEffect(() => {
@@ -141,7 +196,7 @@ const Canvas = ({ readOnly = false }) => {
       dispatch(deleteShapes(data.ids));
     });
 
-    socket.on("view-update", (data) => {
+    socket.on("viewUpdate", (data) => {
       if (stageRef.current) {
         stageRef.current.scale({ x: data.zoom, y: data.zoom });
         stageRef.current.position(data.position);
@@ -149,86 +204,44 @@ const Canvas = ({ readOnly = false }) => {
       }
     });
 
-    socket.on("collaborator-joined", (data) => {
-      dispatch(addCollaborator(data.collaborator));
-    });
-
-    socket.on("collaborator-left", (data) => {
-      dispatch(removeCollaborator(data.userId));
-    });
-
-    socket.on("collaborator-moved", (data) => {
-      dispatch(
-        updateCollaboratorPosition({ id: data.userId, position: data.position })
-      );
-    });
-
     // Handle cursor movement with throttling
-    socket.on("cursorMove", (data) => {
-      const { userId, position, user } = data;
+    socket.on("cursorUpdate", (data) => {
+      const { id, position, color, name, tool, selection } = data;
       const now = Date.now();
 
       // Throttle cursor updates (max 30fps)
       if (
-        lastCursorUpdateRef.current[userId] &&
-        now - lastCursorUpdateRef.current[userId] < 33
+        lastCursorUpdateRef.current[id] &&
+        now - lastCursorUpdateRef.current[id] < 33
       ) {
         return;
       }
-      lastCursorUpdateRef.current[userId] = now;
+      lastCursorUpdateRef.current[id] = now;
 
       setCollaboratorCursors((prev) => ({
         ...prev,
-        [userId]: {
+        [id]: {
           position,
-          user,
+          user: { color, name },
           lastUpdate: now,
+          tool,
+          selection,
         },
       }));
 
       // Clear existing timeout
-      if (cursorTimeoutRef.current[userId]) {
-        clearTimeout(cursorTimeoutRef.current[userId]);
+      if (cursorTimeoutRef.current[id]) {
+        clearTimeout(cursorTimeoutRef.current[id]);
       }
 
       // Set timeout to remove cursor if no updates
-      cursorTimeoutRef.current[userId] = setTimeout(() => {
+      cursorTimeoutRef.current[id] = setTimeout(() => {
         setCollaboratorCursors((prev) => {
           const newCursors = { ...prev };
-          delete newCursors[userId];
+          delete newCursors[id];
           return newCursors;
         });
       }, 2000); // Remove cursor after 2 seconds of inactivity
-    });
-
-    // Handle user presence
-    socket.on("userPresence", (data) => {
-      const { users } = data;
-      setCollaboratorPresence(users);
-    });
-
-    // Handle user joined
-    socket.on("userJoined", (data) => {
-      const { user } = data;
-      setCollaboratorPresence((prev) => ({
-        ...prev,
-        [user.id]: user,
-      }));
-    });
-
-    // Handle user left
-    socket.on("userLeft", (data) => {
-      const { userId } = data;
-      setCollaboratorPresence((prev) => {
-        const newPresence = { ...prev };
-        delete newPresence[userId];
-        return newPresence;
-      });
-      setCollaboratorCursors((prev) => {
-        const newCursors = { ...prev };
-        delete newCursors[userId];
-        return newCursors;
-      });
     });
 
     return () => {
@@ -236,16 +249,10 @@ const Canvas = ({ readOnly = false }) => {
       socket.off("shapeUpdate");
       socket.off("shapeAdd");
       socket.off("shapeDelete");
-      socket.off("view-update");
-      socket.off("collaborator-joined");
-      socket.off("collaborator-left");
-      socket.off("collaborator-moved");
+      socket.off("viewUpdate");
       // Clear all timeouts
       Object.values(cursorTimeoutRef.current).forEach(clearTimeout);
-      socket.off("cursorMove");
-      socket.off("userPresence");
-      socket.off("userJoined");
-      socket.off("userLeft");
+      socket.off("cursorUpdate");
     };
   }, [socket, diagramId, dispatch, joinDiagram, leaveDiagram]);
 
@@ -289,16 +296,7 @@ const Canvas = ({ readOnly = false }) => {
       lastCursorUpdateRef.current["self"] = now;
 
       // Emit cursor position with user info and current state
-      emitCursorMove(diagramId, {
-        position: point,
-        selection: selectedIds,
-        tool,
-        user: {
-          id: socket.id,
-          name: "You",
-          color: "#FF0000",
-        },
-      });
+      emitCursorMove(diagramId, point, selectedIds, tool);
 
       if (readOnly) return;
       if (isPanning && lastMousePosition) {
@@ -310,10 +308,7 @@ const Canvas = ({ readOnly = false }) => {
         });
         dispatch(setLastMousePosition(point));
 
-        emitViewUpdate(diagramId, {
-          zoom: stage.scaleX(),
-          position: stage.position(),
-        });
+        emitViewUpdate(diagramId, stage.scaleX(), stage.position());
         return;
       }
       if (!isDrawing || !currentShape) return;
@@ -524,8 +519,8 @@ const Canvas = ({ readOnly = false }) => {
       tool === "freehand"
         ? stagePoint
         : {
-            x: snapToGrid(stagePoint.x),
-            y: snapToGrid(stagePoint.y),
+            x: isDrawing ? stagePoint.x : snapToGrid(stagePoint.x),
+            y: isDrawing ? stagePoint.y : snapToGrid(stagePoint.y),
           };
 
     // Handle panning
@@ -594,8 +589,8 @@ const Canvas = ({ readOnly = false }) => {
         newShape.points = [pointToUse.x, pointToUse.y];
         break;
       case "text":
-        newShape.width = 0;
-        newShape.height = 0;
+        newShape.width = 60;  // Set minimum initial width
+        newShape.height = 24; // Set minimum initial height
         newShape.text = "";
         break;
       case "sticky":
@@ -634,7 +629,10 @@ const Canvas = ({ readOnly = false }) => {
 
       // Handle text-based tools
       if (tool === "text" || tool === "sticky" || tool === "markdown") {
-        handleTextEdit(newShape.id, newShape.text || "", pointToUse);
+        // Remove immediate call to handleTextEdit here
+        dispatch(setEditingTextId(newShape.id)); // Set editingTextId to trigger useEffect
+        dispatch(setSelectedIds([newShape.id])); // Select the new shape
+        dispatch(setTool("select")); // Switch to select tool after creating text shape
       }
     } else {
       console.log("Invalid drawing tool:", tool);
@@ -793,22 +791,25 @@ const Canvas = ({ readOnly = false }) => {
 
     stage.position(newPos);
     dispatch(setZoom(newScale));
-    emitViewUpdate(diagramId, { zoom: newScale, position: newPos });
+    emitViewUpdate(diagramId, newScale, newPos);
   };
 
   // Update handleTextEdit to properly handle sticky notes
   const handleTextEdit = (shapeId, text, position) => {
+    console.log("handleTextEdit called with:", { shapeId, text, position, shapes, editingTextId });
     if (readOnly) return;
     const stage = stageRef.current;
     if (!stage) return;
 
     const shape = shapes.find((s) => s.id === shapeId);
-    if (!shape) return;
+    if (!shape) {
+      console.log("Shape not found for id:", shapeId);
+      return;
+    }
 
     const absPos = stage.container().getBoundingClientRect();
     const scale = stage.scaleX();
 
-    setEditingTextId(shapeId);
     setEditingTextValue(text || "");
 
     // Calculate position considering stage transform and shape type
@@ -823,6 +824,7 @@ const Canvas = ({ readOnly = false }) => {
       y: stagePoint.y + absPos.top + (shape.type === "sticky" ? 10 : 0),
     };
 
+    console.log("Setting editingTextPos to:", textPos);
     setEditingTextPos(textPos);
 
     // If it's a sticky note, ensure it has a minimum size
@@ -845,6 +847,32 @@ const Canvas = ({ readOnly = false }) => {
       setEditingTextValue("");
     };
   }, []);
+  
+  // Add useEffect to call handleTextEdit when editingTextId changes and shape is available
+  useEffect(() => {
+    if (!editingTextId) return;
+    const shape = shapes.find((s) => s.id === editingTextId);
+    if (!shape) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const absPos = stage.container().getBoundingClientRect();
+    const scale = stage.scaleX();
+
+    // Calculate position considering stage transform and shape type
+    const stagePoint = {
+      x: (shape.x - stage.x()) / scale,
+      y: (shape.y - stage.y()) / scale,
+    };
+
+    // For sticky notes, adjust the position to be inside the note
+    const textPos = {
+      x: stagePoint.x + absPos.left + (shape.type === "sticky" ? 10 : 0),
+      y: stagePoint.y + absPos.top + (shape.type === "sticky" ? 10 : 0),
+    };
+
+    setEditingTextValue(shape.text || "");
+    setEditingTextPos(textPos);
+  }, [editingTextId, shapes]);
 
   // Update text editor portal
   const renderTextEditor = () => {
@@ -1199,11 +1227,12 @@ const Canvas = ({ readOnly = false }) => {
   }, [dispatch, readOnly]);
 
   return (
-    <div className="relative w-full h-full min-h-screen min-w-screen bg-[#18181c] text-gray-100 font-sans">
+    <div className="relative w-full h-screen overflow-hidden">
       {/* Markdown Notes Panel */}
       <MarkdownNotesPanel
         isOpen={isMarkdownPanelOpen}
-        panelRef={markdownPanelRef}
+        onToggle={() => setIsMarkdownPanelOpen(!isMarkdownPanelOpen)}
+        onOpenEditor={openMarkdownEditor}
         editingMarkdownId={editingMarkdownId}
         editingMarkdownValue={editingMarkdownValue}
         setEditingMarkdownId={setEditingMarkdownId}
@@ -1297,12 +1326,29 @@ const Canvas = ({ readOnly = false }) => {
         } bg-gradient-to-br from-black via-neutral-900 to-black pointer-events-auto overflow-hidden`}
         style={{ zIndex: 10 }}
       >
+        {/* Fallback loading state if stage is not ready */}
+        {!stageRef.current && (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+          </div>
+        )}
+        
+        {/* Fallback content if stage fails to render */}
+        {stageRef.current && stageWidth === 0 && stageHeight === 0 && (
+          <div className="flex items-center justify-center h-full text-white">
+            <div className="text-center">
+              <div className="text-lg mb-2">Canvas Loading...</div>
+              <div className="text-sm text-gray-400">Please wait while the canvas initializes</div>
+            </div>
+          </div>
+        )}
+        
         <Stage
           ref={stageRef}
           width={stageWidth}
           height={stageHeight}
-          scaleX={zoom}
-          scaleY={zoom}
+          scaleX={safeZoom}
+          scaleY={safeZoom}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1312,7 +1358,7 @@ const Canvas = ({ readOnly = false }) => {
         >
           {/* Grid Layer - Infinite grid */}
           <GridLayer
-            isGridVisible={isGridVisible}
+            isGridVisible={safeIsGridVisible}
             stageRef={stageRef}
             stageWidth={stageWidth}
             stageHeight={stageHeight}
@@ -1325,7 +1371,7 @@ const Canvas = ({ readOnly = false }) => {
             <ShapeRenderer
               shapes={shapes}
               selectedIds={selectedIds}
-              tool={tool}
+              tool={safeTool}
               readOnly={readOnly}
               dispatch={dispatch}
               emitShapeUpdate={emitShapeUpdate}
@@ -1346,7 +1392,7 @@ const Canvas = ({ readOnly = false }) => {
             shapes={shapes}
             selectedIds={selectedIds}
             stageRef={stageRef}
-            zoom={zoom}
+            zoom={safeZoom}
           />
         </Stage>
       </div>
@@ -1364,13 +1410,12 @@ const Canvas = ({ readOnly = false }) => {
         diagramId={diagramId}
         readOnly={readOnly}
         zoom={zoom}
-      />      {/* Sticky Notes Panel removed as requested */}
+      />
+
+      {/* Sticky Notes Panel removed as requested */}
 
       <div className="fixed top-4 left-4 z-50 flex items-center space-x-4">
-        <CollaboratorPresence
-          collaboratorPresence={collaboratorPresence}
-          collaboratorCursors={collaboratorCursors}
-        />
+        <CollaboratorPresence />
         {/* Home button hover area */}
         <div className="relative group" style={{ width: 56, height: 56 }}>
           <div

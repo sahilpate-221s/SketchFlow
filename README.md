@@ -6,27 +6,31 @@ SketchFlow is a full-stack web application for real-time collaborative diagrammi
 
 ## Features
 
-- **Canvas Diagramming**:
-  - Draw shapes: rectangles, circles, lines, arrows, freehand.
-  - Add text boxes with font size, color, and alignment.
-  - Customize colors, stroke styles (solid/dashed/dotted), and stroke widths.
-  - Support grid snapping (10px), zoom, pan, undo/redo, copy/paste.
-- **Real-Time Collaboration**:
-  - Multi-user editing with instant shape/text sync via Socket.io.
-  - Live cursor tracking with user-specific colors.
-  - Public/private boards with shareable links.
-- **Sticky Notes**:
-  - Unique sidebar for resizable, colorful sticky note annotations.
-- **Markdown Editor**:
-  - Collapsible sidebar for technical notes with live preview.
-- **Export/Import**:
-  - Export diagrams as PNG, SVG, or JSON.
-  - Import JSON to restore diagrams.
-- **Authentication**:
-  - JWT-based login/signup; guest access for public boards.
-- **Responsive UI**:
-  - Excalidraw-inspired design with Tailwind CSS (Handlee font, light backgrounds).
-  - Keyboard shortcuts: Ctrl+Z (undo), Ctrl+C/V (copy/paste).
+### Core Functionality
+- **Real-time Drawing**: Create shapes, lines, text, and freehand drawings
+- **Collaboration**: Real-time multi-user collaboration with live cursors
+- **Sharing**: Generate shareable links for public or private access
+- **Export/Import**: Save and load diagrams in multiple formats
+- **Grid System**: Snap-to-grid drawing with customizable grid size
+- **Zoom & Pan**: Smooth navigation with mouse wheel and space bar
+- **Undo/Redo**: Full history management with keyboard shortcuts
+
+### Sharing & Collaboration
+- **Public Links**: Make diagrams public and share with anyone
+- **Private Links**: Share with specific users via email
+- **Access Control**: Viewer and editor roles for collaborators
+- **Real-time Cursors**: See other users' cursors and selections
+- **Live Updates**: All changes sync instantly across collaborators
+- **Guest Access**: Anonymous users can join public diagrams
+
+### How to Share
+1. **Make Public**: Click the share button and "Make Public" to generate a shareable link
+2. **Copy Links**: Use the share dialog to copy editor, viewer, or public links
+3. **Share via Email**: Add collaborators by email address with specific roles
+4. **Access Control**: 
+   - **Public Link**: Anyone can view and edit
+   - **Editor Link**: Full editing access
+   - **Viewer Link**: Read-only access
 
 ## Tech Stack
 
@@ -115,7 +119,7 @@ SketchFlow is a full-stack web application for real-time collaborative diagrammi
    - Deploy and verify API endpoints.
 
 3. **MongoDB Atlas**:
-   - Create a cluster and whitelist Render’s IP.
+   - Create a cluster and whitelist Render's IP.
    - Update `MONGO_URI` in Render.
 
 ## Usage

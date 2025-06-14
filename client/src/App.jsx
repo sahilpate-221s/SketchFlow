@@ -86,6 +86,16 @@ const App = () => {
                     }
                   />
                   
+                  {/* Public diagram route with share token */}
+                  <Route
+                    path="/diagram/:id"
+                    element={
+                      <BoardRoute mode="edit">
+                        <Board />
+                      </BoardRoute>
+                    }
+                  />
+                  
                   {/* Legacy board route - redirect to edit mode */}
                   <Route
                     path="/board/:id"

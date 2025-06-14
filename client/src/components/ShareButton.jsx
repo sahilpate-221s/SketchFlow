@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Share2 } from 'lucide-react';
+import { Share2, Copy, Check } from 'lucide-react';
+import axios from 'axios';
 
 const ShareButton = ({ className = '' }) => {
   const [showDialog, setShowDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [shareToken, setShareToken] = useState(null);
+  const [isPublic, setIsPublic] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(null);
   const { id } = useParams();
   const buttonRef = useRef(null);
 
@@ -23,13 +28,55 @@ const ShareButton = ({ className = '' }) => {
     };
   }, [showDialog]);
 
+  // Load diagram sharing status
+  useEffect(() => {
+    const loadSharingStatus = async () => {
+      try {
+        console.log('Loading sharing status for diagram:', id);
+        const response = await axios.get(`/api/diagrams/${id}/share-info`);
+        console.log('Sharing status response:', response.data);
+        setShareToken(response.data.shareToken);
+        setIsPublic(response.data.isPublic);
+      } catch (error) {
+        console.error('Error loading sharing status:', error);
+      }
+    };
+
+    if (id) {
+      loadSharingStatus();
+    }
+  }, [id]);
+
   const handleShare = () => {
     setShowDialog(!showDialog);
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setShowDialog(false);
+  const copyToClipboard = async (text, linkType) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLink(linkType);
+      setTimeout(() => setCopiedLink(null), 2000);
+      console.log('Copied link to clipboard:', text);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
+  };
+
+  const makePublic = async () => {
+    setIsLoading(true);
+    try {
+      console.log('Making diagram public:', id);
+      const response = await axios.post(`/api/diagrams/${id}/share`, {
+        isPublic: true
+      });
+      console.log('Make public response:', response.data);
+      setShareToken(response.data.diagram.shareToken);
+      setIsPublic(true);
+    } catch (error) {
+      console.error('Error making diagram public:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getShareUrl = (mode) => {
@@ -39,6 +86,11 @@ const ShareButton = ({ className = '' }) => {
       url.searchParams.set('shareToken', shareToken);
     }
     return url.toString();
+  };
+
+  const getPublicUrl = () => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/diagram/${id}?shareToken=${shareToken}`;
   };
 
   return (
@@ -57,47 +109,86 @@ const ShareButton = ({ className = '' }) => {
       </button>
 
       {showDialog && (
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-[480px] toolbar-collab-list">
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-[480px] toolbar-collab-list z-50">
           <div className="bg-gradient-to-br from-neutral-900/95 to-black/95 rounded-xl shadow-2xl p-5 border border-white/10">
             <div className="text-sm font-medium text-gray-100 mb-4">Share Canvas</div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-2">Editor Link</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={getShareUrl('edit')}
-                    className="flex-1 px-3 py-2 bg-neutral-800 border border-white/10 rounded text-white text-sm font-mono"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(getShareUrl('edit'))}
-                    className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded text-sm font-medium transition-colors whitespace-nowrap"
-                  >
-                    Copy Link
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs text-neutral-500">Full editing access</p>
+            
+            {!isPublic && !shareToken && (
+              <div className="mb-4 p-3 bg-neutral-800/50 rounded-lg border border-neutral-700">
+                <p className="text-xs text-neutral-300 mb-3">Make this diagram public to generate shareable links</p>
+                <button
+                  onClick={makePublic}
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded text-sm font-medium transition-colors"
+                >
+                  {isLoading ? 'Making Public...' : 'Make Public'}
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-2">Viewer Link</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={getShareUrl('view')}
-                    className="flex-1 px-3 py-2 bg-neutral-800 border border-white/10 rounded text-white text-sm font-mono"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(getShareUrl('view'))}
-                    className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded text-sm font-medium transition-colors whitespace-nowrap"
-                  >
-                    Copy Link
-                  </button>
+            )}
+
+            {shareToken && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 mb-2">Public Link</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={getPublicUrl()}
+                      className="flex-1 px-3 py-2 bg-neutral-800 border border-white/10 rounded text-white text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(getPublicUrl(), 'public')}
+                      className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                    >
+                      {copiedLink === 'public' ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedLink === 'public' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-neutral-500">Anyone with this link can view and edit</p>
                 </div>
-                <p className="mt-1.5 text-xs text-neutral-500">Read-only access</p>
+
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 mb-2">Editor Link</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={getShareUrl('edit')}
+                      className="flex-1 px-3 py-2 bg-neutral-800 border border-white/10 rounded text-white text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(getShareUrl('edit'), 'editor')}
+                      className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                    >
+                      {copiedLink === 'editor' ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedLink === 'editor' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-neutral-500">Full editing access</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 mb-2">Viewer Link</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={getShareUrl('view')}
+                      className="flex-1 px-3 py-2 bg-neutral-800 border border-white/10 rounded text-white text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(getShareUrl('view'), 'viewer')}
+                      className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                    >
+                      {copiedLink === 'viewer' ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedLink === 'viewer' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-neutral-500">Read-only access</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

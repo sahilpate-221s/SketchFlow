@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Rect, Circle, Arrow, Line, Text, Group, Transformer } from 'react-konva';
 import { catmullRomSpline } from '../utils/catmullRom';
+import { updateShape } from '../store/canvasSlice';
 
 const ShapeRenderer = ({
   shapes,
@@ -83,7 +84,7 @@ const ShapeRenderer = ({
       node.scaleY(1);
     }
     emitShapeUpdate(diagramId, newShape);
-    dispatch({ type: 'canvas/updateShape', payload: newShape });
+    dispatch(updateShape(newShape));
   };
 
 
@@ -183,9 +184,8 @@ const ShapeRenderer = ({
         switch (shape.type) {
           case 'rectangle':
             return (
-              <>
+              <React.Fragment key={shape.id}>
                 <Rect
-                  key={shape.id}
                   ref={shapeRef}
                   {...commonProps}
                   {...transformProps}
@@ -200,21 +200,20 @@ const ShapeRenderer = ({
                   shadowEnabled={false}
                 />
                 {showSelectionDots() && (
-                  <>
+                  <React.Fragment>
                     {/* Animated minimal corner dots for premium look */}
-                    <Circle x={shape.x} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x + shape.width} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x} y={shape.y + shape.height} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x + shape.width} y={shape.y + shape.height} radius={3} fill="#fff" opacity={0.7} />
-                  </>
+                    <Circle key={`${shape.id}-dot-1`} x={shape.x} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-2`} x={shape.x + shape.width} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-3`} x={shape.x} y={shape.y + shape.height} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-4`} x={shape.x + shape.width} y={shape.y + shape.height} radius={3} fill="#fff" opacity={0.7} />
+                  </React.Fragment>
                 )}
-              </>
+              </React.Fragment>
             );
           case 'circle':
             return (
-              <>
+              <React.Fragment key={shape.id}>
                 <Circle
-                  key={shape.id}
                   ref={shapeRef}
                   {...commonProps}
                   {...transformProps}
@@ -227,22 +226,21 @@ const ShapeRenderer = ({
                   shadowEnabled={false}
                 />
                 {showSelectionDots() && (
-                  <>
+                  <React.Fragment>
                     {/* Four cardinal points for circle selection */}
-                    <Circle x={shape.x + shape.radius} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x - shape.radius} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x} y={shape.y + shape.radius} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.x} y={shape.y - shape.radius} radius={3} fill="#fff" opacity={0.7} />
-                  </>
+                    <Circle key={`${shape.id}-dot-1`} x={shape.x + shape.radius} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-2`} x={shape.x - shape.radius} y={shape.y} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-3`} x={shape.x} y={shape.y + shape.radius} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-4`} x={shape.x} y={shape.y - shape.radius} radius={3} fill="#fff" opacity={0.7} />
+                  </React.Fragment>
                 )}
-              </>
+              </React.Fragment>
             );
           case 'line':
           case 'arrow':
             return (
-              <>
+              <React.Fragment key={shape.id}>
                 <Arrow
-                  key={shape.id}
                   ref={shapeRef}
                   {...commonProps}
                   points={shape.points}
@@ -254,13 +252,13 @@ const ShapeRenderer = ({
                   shadowEnabled={false}
                 />
                 {showSelectionDots() && (
-                  <>
+                  <React.Fragment>
                     {/* Endpoints dots for line/arrow */}
-                    <Circle x={shape.points[0]} y={shape.points[1]} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.points[2]} y={shape.points[3]} radius={3} fill="#fff" opacity={0.7} />
-                  </>
+                    <Circle key={`${shape.id}-dot-1`} x={shape.points[0]} y={shape.points[1]} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-2`} x={shape.points[2]} y={shape.points[3]} radius={3} fill="#fff" opacity={0.7} />
+                  </React.Fragment>
                 )}
-              </>
+              </React.Fragment>
             );
           case 'freehand':
             // Use Catmull-Rom smoothing (same as Canvas.jsx)
@@ -357,13 +355,13 @@ const ShapeRenderer = ({
                   verticalAlign="top"
                 />
                 {showSelectionDots() && (
-                  <>
+                  <React.Fragment>
                     {/* Minimal animated corner dots for sticky note selection */}
-                    <Circle x={0} y={0} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.width} y={0} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={0} y={shape.height} radius={3} fill="#fff" opacity={0.7} />
-                    <Circle x={shape.width} y={shape.height} radius={3} fill="#fff" opacity={0.7} />
-                  </>
+                    <Circle key={`${shape.id}-dot-1`} x={0} y={0} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-2`} x={shape.width} y={0} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-3`} x={0} y={shape.height} radius={3} fill="#fff" opacity={0.7} />
+                    <Circle key={`${shape.id}-dot-4`} x={shape.width} y={shape.height} radius={3} fill="#fff" opacity={0.7} />
+                  </React.Fragment>
                 )}
                 {/* Resize handle remains unchanged */}
                 {!readOnly && tool === 'select' && isSelected && (
