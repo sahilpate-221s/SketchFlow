@@ -33,7 +33,8 @@ import {
   Upload,
   Users,
   Plus,
-  Share2
+  Share2,
+  MoreHorizontal
 } from 'lucide-react';
 import './Toolbar.css';
 import ShareButton from './ShareButton';
@@ -107,6 +108,7 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [toolbarHidden, setToolbarHidden] = useState(false);
   const toolbarRef = useRef(null);
+  const [showMore, setShowMore] = useState(false);
 
   const handleZoom = (delta) => {
     const newZoom = Math.max(0.1, Math.min(5, zoom + delta));
@@ -120,12 +122,49 @@ const Toolbar = ({ onExport, onImport, onShare, collaborators = [], onGridToggle
 
   return (
     <div className="toolbar-container">
-      {/* Top Center Toolbar - modernized pill and icons */}
+      {/* Mobile Bottom Toolbar */}
+      <div className="fixed bottom-0 left-0 w-full z-50 bg-gradient-to-t from-black/80 via-neutral-900/90 to-black/80 shadow-2xl flex md:hidden justify-between px-2 py-1 border-t border-neutral-800">
+        <div className="flex flex-1 items-center justify-between overflow-x-auto">
+          {TOOL_GROUPS.flatMap((group) => group.tools).map((toolItem) => (
+            <button
+              key={toolItem.id}
+              onClick={() => handleToolSelect(toolItem.id)}
+              className={`flex flex-col items-center justify-center mx-1 px-2 py-1 rounded-lg ${tool === toolItem.id ? 'bg-blue-700 text-white' : 'bg-transparent text-gray-200'} text-lg focus:outline-none`}
+              style={{ minWidth: 44, minHeight: 44 }}
+              title={toolItem.label}
+            >
+              <span>{toolItem.icon}</span>
+              <span className="text-[10px] leading-none mt-0.5">{toolItem.label}</span>
+            </button>
+          ))}
+          {/* More menu for extra controls */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMore((v) => !v)}
+              className="flex flex-col items-center justify-center mx-1 px-2 py-1 rounded-lg bg-transparent text-gray-200 text-lg focus:outline-none"
+              style={{ minWidth: 44, minHeight: 44 }}
+              title="More"
+            >
+              <MoreHorizontal size={22} />
+              <span className="text-[10px] leading-none mt-0.5">More</span>
+            </button>
+            {showMore && (
+              <div className="absolute bottom-12 left-0 w-48 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl p-2 z-50 flex flex-col space-y-1">
+                <button onClick={onGridToggle} className="w-full text-left px-3 py-2 rounded hover:bg-neutral-800 text-gray-200 text-sm">{isGridVisible ? 'Hide Grid' : 'Show Grid'}</button>
+                <button onClick={() => canUndo && dispatch(undo())} disabled={!canUndo} className="w-full text-left px-3 py-2 rounded hover:bg-neutral-800 text-gray-200 text-sm disabled:opacity-50">Undo</button>
+                <button onClick={() => canRedo && dispatch(redo())} disabled={!canRedo} className="w-full text-left px-3 py-2 rounded hover:bg-neutral-800 text-gray-200 text-sm disabled:opacity-50">Redo</button>
+                <ShareButton />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {/* Desktop Toolbar (unchanged) */}
       <div
-        className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50"
+        className="hidden md:fixed md:top-6 md:left-1/2 md:transform md:-translate-x-1/2 md:z-50 md:block"
         style={{ minHeight: '56px', height: '56px' }}
       >
-        <div className="toolbar-pill top flex items-center" style={{ minHeight: '56px', height: '56px', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
+        <div className="toolbar-pill top flex items-center overflow-x-auto md:overflow-visible px-2 md:px-0" style={{ minHeight: '56px', height: '56px', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
           {TOOL_GROUPS.map((group, groupIdx) => (
             <div key={group.name} className="toolbar-group">
               {group.tools.map((toolItem) => (

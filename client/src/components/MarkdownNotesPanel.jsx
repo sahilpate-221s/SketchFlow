@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateShape, addShape, deleteShapes } from '../store/canvasSlice';
 import { v4 as uuidv4 } from 'uuid';
 
-const MarkdownNotesPanel = ({
+const MarkdownNotesPanel = forwardRef(({
   isOpen,
   onClose,
   editingMarkdownId,
@@ -12,20 +12,20 @@ const MarkdownNotesPanel = ({
   editingMarkdownValue,
   setEditingMarkdownValue,
   handleMarkdownSave,
-}) => {
+}, ref) => {
   const dispatch = useDispatch();
   const shapes = useSelector(state => state.canvas.shapes);
 
   return (
     <div
-      className={`fixed left-0 top-0 h-full bg-[#181818] shadow-xl transition-transform duration-300 ease-in-out z-50 ${
-        isOpen ? 'translate-x-0' : '-translate-x-full'
+      ref={ref}
+      className={`fixed left-0 md:left-0 bottom-0 md:top-0 h-2/3 md:h-full w-full max-w-xs md:w-[300px] bg-[#181818] shadow-xl transition-transform duration-300 ease-in-out z-50 ${
+        isOpen ? 'translate-y-0' : 'translate-y-full md:translate-x-0 md:w-12'
       }`}
-      style={{ width: '300px' }}
     >
       <div className="flex flex-col h-full">
         {/* Panel Header */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-800/90 bg-[#181818]/95">
+        <div className="flex items-center justify-between p-2 md:p-3 border-b border-gray-800/90 bg-[#181818]/95">
           <h2 className="text-lg font-semibold text-gray-600">
             Quick Notes
           </h2>
@@ -35,9 +35,10 @@ const MarkdownNotesPanel = ({
               setEditingMarkdownId(null);
               setEditingMarkdownValue('');
             }}
-            className="p-2 rounded-lg hover:bg-gray-100/90 text-gray-400"
+            className="p-2 md:p-2.5 rounded-lg hover:bg-gray-100/90 text-gray-400 text-xl md:text-base"
+            style={{ zIndex: 40 }}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -46,11 +47,11 @@ const MarkdownNotesPanel = ({
         {/* Editor Content */}
         <div className="flex flex-col h-full bg-[#181818]/95">
           {/* Quick Input */}
-          <div className="p-3 border-b border-gray-800/90">
+          <div className="p-2 md:p-3 border-b border-gray-800/90">
             <textarea
               value={editingMarkdownValue}
               onChange={e => setEditingMarkdownValue(e.target.value)}
-              className="w-full p-2 rounded-lg border border-gray-800/90 text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-[#181818]/95"
+              className="w-full p-1 md:p-2 rounded-lg border border-gray-800/90 text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-[#181818]/95 text-xs md:text-sm"
               placeholder="Type your note here... (Press Enter for new bullet point)"
               rows={3}
               onKeyDown={e => {
@@ -86,14 +87,14 @@ const MarkdownNotesPanel = ({
                   setEditingMarkdownId(null);
                   setEditingMarkdownValue('');
                 }}
-                className="px-3 py-1.5 text-sm rounded-lg bg-gradient-to-br from-neutral-800 via-neutral-900 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-700 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="px-2 py-1 md:px-3 md:py-1.5 text-xs md:text-sm rounded-lg bg-gradient-to-br from-neutral-800 via-neutral-900 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-700 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
                 style={{ cursor: 'pointer' }}
               >
                 Clear
               </button>
               <button
                 onClick={handleMarkdownSave}
-                className="px-3 py-1.5 text-sm rounded-lg bg-gradient-to-br from-neutral-700 via-neutral-800 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-600 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="px-2 py-1 md:px-3 md:py-1.5 text-xs md:text-sm rounded-lg bg-gradient-to-br from-neutral-700 via-neutral-800 to-black text-white font-semibold shadow-glossy border border-white/20 hover:from-neutral-600 hover:to-neutral-900 transition focus:outline-none focus:ring-2 focus:ring-white/20"
                 style={{ cursor: 'pointer' }}
               >
                 {editingMarkdownId ? 'Update Note' : 'Add Note'}
@@ -102,14 +103,14 @@ const MarkdownNotesPanel = ({
           </div>
 
           {/* Notes List */}
-          <div className="flex-1 overflow-auto p-3">
+          <div className="flex-1 overflow-auto p-2 md:p-3">
             {shapes
               .filter(shape => shape.type === 'markdown')
               .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
               .map(note => (
                 <div
                   key={note.id}
-                  className="mb-3 p-3 rounded-lg border border-gray-800/90 bg-[#181818]/95 transition-colors hover:text-white"
+                  className="mb-2 md:mb-3 p-2 md:p-3 rounded-lg border border-gray-800/90 bg-[#181818]/95 transition-colors hover:text-white text-xs md:text-sm"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="text-sm text-gray-500">
@@ -139,7 +140,7 @@ const MarkdownNotesPanel = ({
                       </button>
                     </div>
                   </div>
-                  <div className="prose prose-sm max-w-none text-gray-300">
+                  <div className="prose prose-sm max-w-none text-gray-300 text-xs md:text-sm">
                     <ReactMarkdown>{note.text}</ReactMarkdown>
                   </div>
                 </div>
@@ -149,6 +150,6 @@ const MarkdownNotesPanel = ({
       </div>
     </div>
   );
-};
+});
 
 export default MarkdownNotesPanel;

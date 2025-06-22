@@ -193,20 +193,17 @@ const Board = ({ mode = 'edit' }) => {
           markdownContent: diagram.canvas.markdown?.content || '',
         }));
       }
-      
       // Ensure we have a default tool selected
       if (!tool) {
         dispatch(setTool('select'));
       }
-      
       // Ensure we have a default zoom
       if (!zoom || zoom === 0) {
         dispatch(setZoom(1));
       }
-      
       setIsLoading(false);
     }
-  }, [diagram, dispatch, tool, zoom]);
+  }, [diagram, dispatch]);
 
   // Socket connection and collaboration
   useEffect(() => {

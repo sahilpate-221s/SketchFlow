@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Edit2, Grid, List, LogOut } from 'lucide-react';
+import { Plus, Trash2, Edit2, Grid, List, LogOut, Unlock, Lock, MoreVertical, Menu } from 'lucide-react';
 import { leaveDiagram } from '../socket';
 
 const sortOptions = [
@@ -22,6 +22,9 @@ const Dashboard = () => {
   const [sortBy, setSortBy] = useState('updatedAt');
   const [showConfetti, setShowConfetti] = useState(false);
   const editInputRef = useRef(null);
+  const [publicStatus, setPublicStatus] = useState({});
+  const [menuOpen, setMenuOpen] = useState({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetchDiagrams();
@@ -38,6 +41,10 @@ const Dashboard = () => {
       if (!response.ok) throw new Error('Failed to fetch diagrams');
       const data = await response.json();
       setDiagrams(data);
+      // Set public status for each diagram
+      const status = {};
+      data.forEach(d => { status[d._id] = d.isPublic; });
+      setPublicStatus(status);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -160,6 +167,50 @@ const Dashboard = () => {
     return new Date(diagram.updatedAt) > new Date(latest.updatedAt) ? diagram : latest;
   }, diagrams[0] || null);
 
+  const makeDiagramPublic = async (diagramId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/diagrams/${diagramId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isPublic: true })
+      });
+      if (!response.ok) throw new Error('Failed to make diagram public');
+      setPublicStatus(prev => ({ ...prev, [diagramId]: true }));
+    } catch (err) {
+      setError(err.message || 'Failed to make diagram public.');
+    }
+  };
+
+  const toggleMenu = (diagramId) => {
+    setMenuOpen((prev) => ({ ...prev, [diagramId]: !prev[diagramId] }));
+  };
+
+  const closeMenu = (diagramId) => {
+    setMenuOpen((prev) => ({ ...prev, [diagramId]: false }));
+  };
+
+  const makeDiagramPrivate = async (diagramId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/diagrams/${diagramId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isPublic: false })
+      });
+      if (!response.ok) throw new Error('Failed to make diagram private');
+      setPublicStatus(prev => ({ ...prev, [diagramId]: false }));
+    } catch (err) {
+      setError(err.message || 'Failed to make diagram private.');
+    }
+  };
+
   // Keyboard shortcut for new diagram (N)
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -171,8 +222,27 @@ const Dashboard = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editingDiagram, diagrams]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.dashboard-menu-btn') && !event.target.closest('.dashboard-menu-dropdown')) {
+        setMenuOpen({});
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-black via-neutral-900 to-black text-neutral-100 font-sans">
+    <div className="min-h-screen flex bg-gradient-to-br from-black via-neutral-900 to-black text-neutral-100 font-sans relative">
+      {/* Sidebar Toggle Button (mobile only) */}
+      <button
+        className="md:hidden fixed top-4 left-4 z-50 bg-neutral-900/90 border border-neutral-700 rounded-full p-2 shadow-lg focus:outline-none"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open sidebar"
+        style={{ zIndex: 60 }}
+      >
+        <Menu size={28} />
+      </button>
       {/* Progress Bar */}
       {loading && (
         <div className="fixed top-0 left-0 w-full h-1 z-50">
@@ -186,7 +256,17 @@ const Dashboard = () => {
         </div>
       )}
       {/* Sidebar */}
-      <aside className="w-64 bg-gradient-to-b from-neutral-900/90 to-black/80 border-r border-neutral-800/60 flex flex-col justify-between py-8 px-6 shadow-2xl rounded-r-2xl backdrop-blur-md">
+      <aside className={`fixed md:static top-0 left-0 h-full w-64 bg-gradient-to-b from-neutral-900/90 to-black/80 border-r border-neutral-800/60 flex flex-col justify-between py-8 px-6 shadow-2xl rounded-r-2xl backdrop-blur-md z-50 transition-transform duration-300 md:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        style={{ zIndex: 55 }}
+      >
+        {/* Close button (mobile only) */}
+        <button
+          className="md:hidden absolute top-4 right-4 bg-neutral-900/90 border border-neutral-700 rounded-full p-2 shadow-lg focus:outline-none"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
         <div>
           <div className="flex items-center mb-10">
             <span className="text-2xl font-extrabold tracking-tight text-white drop-shadow-gloss">SketchFlow</span>
@@ -227,8 +307,16 @@ const Dashboard = () => {
           </button>
         </div>
       </aside>
+      {/* Sidebar Backdrop (mobile only) */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar backdrop"
+        />
+      )}
       {/* Main Content */}
-      <main className="flex-1 p-10 overflow-y-auto min-h-screen bg-gradient-to-br from-black/90 to-neutral-900/90 relative">
+      <main className="flex-1 p-4 md:p-10 overflow-y-auto min-h-screen bg-gradient-to-br from-black/90 to-neutral-900/90 relative">
         {/* Glassy highlight overlay */}
         <div className="pointer-events-none absolute inset-0 z-0">
           <div className="absolute left-1/2 top-0 -translate-x-1/2 w-3/4 h-32 bg-white/10 rounded-b-full blur-2xl opacity-30" />
@@ -338,27 +426,49 @@ const Dashboard = () => {
                     {diagram._id === lastUpdatedDiagram?._id && (
                       <span className="ml-1 px-2 py-0.5 text-xs rounded bg-neutral-800 text-neutral-200 font-semibold animate-bounce-slow shadow-lg">Recent</span>
                     )}
+                    <div className="absolute top-4 right-4 flex space-x-1 group-hover:opacity-100 opacity-90 transition-opacity">
+                      <button
+                        onClick={e => { e.stopPropagation(); toggleMenu(diagram._id); }}
+                        className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60 p-1 dashboard-menu-btn"
+                        aria-label="More options"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      {menuOpen[diagram._id] && (
+                        <div className="absolute right-0 mt-2 w-40 bg-neutral-900 border border-white/10 rounded-lg shadow-xl z-50 dashboard-menu-dropdown">
+                          <button
+                            onClick={e => { e.stopPropagation(); closeMenu(diagram._id); navigate(`/board/${diagram._id}`); }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-t-lg"
+                          >
+                            <Edit2 size={15} /> Edit
+                          </button>
+                          {publicStatus[diagram._id] ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); closeMenu(diagram._id); makeDiagramPrivate(diagram._id); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                            >
+                              <Lock size={15} /> Make Private
+                            </button>
+                          ) : (
+                            <button
+                              onClick={e => { e.stopPropagation(); closeMenu(diagram._id); makeDiagramPublic(diagram._id); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                            >
+                              <Unlock size={15} /> Make Public
+                            </button>
+                          )}
+                          <button
+                            onClick={e => { e.stopPropagation(); closeMenu(diagram._id); deleteDiagram(diagram._id); }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-700 rounded-b-lg"
+                          >
+                            <Trash2 size={15} /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-                <p className="text-neutral-400 mt-2 text-xs">Last updated: {new Date(diagram.updatedAt).toLocaleString()}</p>
-                <div className="absolute top-4 right-4 flex space-x-1 group-hover:opacity-100 opacity-90 transition-opacity">
-                  <button
-                    onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60"
-                    aria-label="Edit diagram"
-                    style={{ cursor: 'pointer', padding: '0.22rem 0.32rem', minWidth: 0, minHeight: 0 }}
-                  >
-                    <Edit2 size={15} />
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteDiagram(diagram._id); }}
-                    className="text-red-400 hover:text-red-600 border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60"
-                    aria-label="Delete diagram"
-                    style={{ cursor: 'pointer', padding: '0.22rem 0.32rem', minWidth: 0, minHeight: 0 }}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
                 {/* Open Canvas Button */}
                 <button
                   onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
@@ -407,35 +517,49 @@ const Dashboard = () => {
                     {diagram._id === lastUpdatedDiagram?._id && (
                       <span className="ml-1 px-2 py-0.5 text-xs rounded bg-neutral-800 text-neutral-200 font-semibold animate-bounce-slow shadow-lg">Recent</span>
                     )}
+                    <div className="absolute top-4 right-4 flex space-x-1 group-hover:opacity-100 opacity-90 transition-opacity">
+                      <button
+                        onClick={e => { e.stopPropagation(); toggleMenu(diagram._id); }}
+                        className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-1 focus:ring-white/20 bg-black/30 transition duration-75 hover:bg-neutral-800/60 p-1 dashboard-menu-btn"
+                        aria-label="More options"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      {menuOpen[diagram._id] && (
+                        <div className="absolute right-0 mt-2 w-40 bg-neutral-900 border border-white/10 rounded-lg shadow-xl z-50 dashboard-menu-dropdown">
+                          <button
+                            onClick={e => { e.stopPropagation(); closeMenu(diagram._id); navigate(`/board/${diagram._id}`); }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 rounded-t-lg"
+                          >
+                            <Edit2 size={15} /> Edit
+                          </button>
+                          {publicStatus[diagram._id] ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); closeMenu(diagram._id); makeDiagramPrivate(diagram._id); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                            >
+                              <Lock size={15} /> Make Private
+                            </button>
+                          ) : (
+                            <button
+                              onClick={e => { e.stopPropagation(); closeMenu(diagram._id); makeDiagramPublic(diagram._id); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+                            >
+                              <Unlock size={15} /> Make Public
+                            </button>
+                          )}
+                          <button
+                            onClick={e => { e.stopPropagation(); closeMenu(diagram._id); deleteDiagram(diagram._id); }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-700 rounded-b-lg"
+                          >
+                            <Trash2 size={15} /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="bg-gradient-to-r from-neutral-800/80 to-black/60 hover:from-neutral-700/80 hover:to-neutral-800/80 text-white font-semibold px-3 py-1 rounded-lg shadow-glossy transition-all flex items-center gap-1 text-sm backdrop-blur-md border border-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
-                    aria-label="Open diagram canvas"
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                    Open
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); navigate(`/board/${diagram._id}`); }}
-                    className="text-neutral-300 hover:text-white border border-white/10 rounded focus:outline-none focus:ring-2 focus:ring-white/30"
-                    aria-label="Edit diagram"
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Edit2 />
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteDiagram(diagram._id); }}
-                    className="text-red-400 hover:text-red-600 border border-white/10 rounded focus:outline-none focus:ring-2 focus:ring-white/30"
-                    aria-label="Delete diagram"
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Trash2 />
-                  </button>
-                </div>
               </li>
             ))}
           </ul>

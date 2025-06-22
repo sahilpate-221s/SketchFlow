@@ -86,8 +86,6 @@ const TextEditorPortal = ({
         position: 'absolute',
         top: editingTextPos.y,
         left: editingTextPos.x,
-        transform: `scale(${shape.zoom || 1})`,
-        transformOrigin: 'top left',
         zIndex: 2000,
       }}
     >
@@ -95,15 +93,15 @@ const TextEditorPortal = ({
         className="relative group"
         style={{
           width: dimensions.width,
-          minWidth: 60,
+          minWidth: 120,
           height: dimensions.height,
-          minHeight: 24,
+          minHeight: 32,
           fontFamily: 'Inter, Handlee, sans-serif',
-          borderRadius: 12,
-          background: '#23232b', // fallback solid color for visibility
+          borderRadius: 10,
+          background: '#23232b',
           backgroundImage: 'linear-gradient(135deg, #23232b 0%, #35353f 100%)',
           boxShadow: '0 4px 32px 0 #000a, 0 1.5px 6px 0 #fff2',
-          border: '2px solid #fff', // visible white border
+          border: '1px solid #fff', // Thin white border
           transition: 'box-shadow 0.2s',
           overflow: 'visible',
         }}
@@ -114,6 +112,8 @@ const TextEditorPortal = ({
           onChange={e => setLocalValue(e.target.value)}
           onBlur={save}
           onKeyDown={e => {
+            // Prevent global shortcuts when typing
+            e.stopPropagation();
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               save();
@@ -129,8 +129,8 @@ const TextEditorPortal = ({
             color: '#fff',
             textShadow: '0 1px 4px #000b',
             lineHeight: 1.4,
-            minWidth: 60,
-            minHeight: 24,
+            minWidth: 120,
+            minHeight: 32,
             boxSizing: 'border-box',
           }}
           autoFocus

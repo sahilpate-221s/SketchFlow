@@ -16,11 +16,12 @@ const ShapeRenderer = ({
   snapToGrid,
   handleTextEdit,
   diagramId,
-  transformerRef,
   shapesRef
 }) => {
+  console.log('[ShapeRenderer] shapes prop:', shapes);
+  const localTransformerRef = useRef();
+
   // --- Helper: get node refs for transformer ---
-  // Clean up shapesRef.current to only valid, mounted nodes for current shapes
   useEffect(() => {
     if (!shapesRef.current) shapesRef.current = [];
     // Remove any refs that are not in the current shapes list
@@ -40,15 +41,15 @@ const ShapeRenderer = ({
 
   // --- Transformer logic: attach to selected nodes and handle resizing ---
   useEffect(() => {
-    if (!transformerRef.current || !shapesRef.current) return;
+    if (!localTransformerRef.current || !shapesRef.current) return;
     const selectedNodes = shapesRef.current.filter(
       (node) => node && selectedIds.includes(node.id())
     );
     if (selectedNodes.length > 0) {
-      transformerRef.current.nodes(selectedNodes);
-      transformerRef.current.getLayer().batchDraw();
+      localTransformerRef.current.nodes(selectedNodes);
+      localTransformerRef.current.getLayer().batchDraw();
     } else {
-      transformerRef.current.nodes([]);
+      localTransformerRef.current.nodes([]);
     }
   }, [selectedIds, shapes]);
 
@@ -90,7 +91,9 @@ const ShapeRenderer = ({
 
   return (
     <>
+      {console.log("ShapeRenderer - shapes:", shapes)}
       {shapes.map((shape, idx) => {
+        console.log("Rendering shape:", shape);
         if (shape.type === 'markdown') return null;
         const isShapeDraggable = !readOnly && tool === 'select' && selectedIds.includes(shape.id);
         const isSelected = selectedIds.includes(shape.id);
@@ -327,10 +330,7 @@ const ShapeRenderer = ({
                   e.cancelBubble = true;
                   const node = e.target;
                   const pos = node.getAbsolutePosition();
-                  const stickyShape = shapes.find(s => s.id === shape.id);
-                  if (stickyShape) {
-                    handleTextEdit(shape.id, stickyShape.text || '', pos);
-                  }
+                  handleTextEdit(shape.id, shape.text, pos);
                 }}
               >
                 <Rect
@@ -387,10 +387,10 @@ const ShapeRenderer = ({
         }
       })}
       {/* --- Transformer node (single instance, outside map) --- */}
-      {transformerRef && transformerRef.current && (
+      {!readOnly && tool === 'select' && selectedIds.length > 0 && (
         <Transformer
-          ref={transformerRef}
-          boundBoxFunc={(oldBox, newBox) => newBox} // allow all transforms
+          ref={localTransformerRef}
+          boundBoxFunc={(oldBox, newBox) => newBox}
           rotateEnabled={true}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           anchorSize={8}

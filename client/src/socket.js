@@ -96,17 +96,18 @@ export const disconnectSocket = () => {
   socket.disconnect();
 };
 
-export const emitShapeAdd = (diagramId, shapeData) => {
-  socket.emit('shapeAdd', { diagramId, shapeData });
-};
-
-export const emitShapeUpdate = (diagramId, shapeData) => {
-  socket.emit('shapeUpdate', { diagramId, shapeData });
-};
-
-export const emitShapeDelete = (diagramId, shapeIds) => {
-  socket.emit('shapeDelete', { diagramId, shapeIds });
-};
+// DEPRECATED: Use context-based socket from useSocket() for all shape events.
+// export const emitShapeAdd = (diagramId, shapeData) => {
+//   socket.emit('shapeAdd', { diagramId, shapeData });
+// };
+//
+// export const emitShapeUpdate = (diagramId, shapeData) => {
+//   socket.emit('shapeUpdate', { diagramId, shapeData });
+// };
+//
+// export const emitShapeDelete = (diagramId, shapeIds) => {
+//   socket.emit('shapeDelete', { diagramId, shapeIds });
+// };
 
 export const emitCursorUpdate = (diagramId, cursorData) => {
   socket.emit('cursorUpdate', { diagramId, cursorData });

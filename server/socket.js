@@ -157,20 +157,44 @@ const initializeSocket = (server) => {
     });
 
     // Shape events
-    socket.on('shapeAdd', ({ diagramId, shape }) => {
+    socket.on('shapeAdd', async ({ diagramId, shape }) => {
       if (currentDiagramId === diagramId) {
+        // Save to DB
+        await Diagram.findByIdAndUpdate(
+          diagramId,
+          { $push: { 'canvas.shapes': shape } }
+        );
+        // Broadcast to others
         socket.to(diagramId).emit('shapeAdd', { shape });
       }
     });
 
-    socket.on('shapeUpdate', ({ diagramId, shape }) => {
+    socket.on('shapeUpdate', async ({ diagramId, shape }) => {
       if (currentDiagramId === diagramId) {
+        // Update in DB
+        const diagram = await Diagram.findById(diagramId);
+        if (diagram) {
+          const shapes = diagram.canvas.shapes;
+          const idx = shapes.findIndex(s => s.id === shape.id);
+          if (idx !== -1) {
+            shapes[idx] = shape;
+            diagram.markModified('canvas.shapes');
+            await diagram.save();
+          }
+        }
+        // Broadcast to others
         socket.to(diagramId).emit('shapeUpdate', { shape });
       }
     });
 
-    socket.on('shapeDelete', ({ diagramId, ids }) => {
+    socket.on('shapeDelete', async ({ diagramId, ids }) => {
       if (currentDiagramId === diagramId) {
+        // Remove from DB
+        await Diagram.findByIdAndUpdate(
+          diagramId,
+          { $pull: { 'canvas.shapes': { id: { $in: ids } } } }
+        );
+        // Broadcast to others
         socket.to(diagramId).emit('shapeDelete', { ids });
       }
     });

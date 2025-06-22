@@ -11,7 +11,7 @@ const initialState = {
   strokeStyle: 'solid', // solid, dashed
   strokeWidth: 2,
   strokeColor: '#ffffff',
-  fillColor: '#ffffff',
+  fillColor: null,
   fontSize: 16,
   fontFamily: 'Handlee',
   gridSize: 20,
@@ -55,38 +55,42 @@ const canvasSlice = createSlice({
     addShape: (state, action) => {
       const newShape = action.payload;
       
-      // Add default properties based on shape type
-      switch (newShape.type) {        case 'sticky':
+      const isDarkTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+      const defaultFill = isDarkTheme ? '#23272f' : '#b0b3b8';
+      const defaultStroke = '#6e6e6e';
+
+      // Only set defaults for sticky, markdown, and text if not already set
+      switch (newShape.type) {
+        case 'sticky':
           newShape.width = newShape.width || 200;
           newShape.height = newShape.height || 150;
-          // Use a modern, premium neutral/black gradient for sticky notes
-          newShape.fill = newShape.fill || 'linear-gradient(135deg, #23232b 0%, #35353f 100%)';
+          newShape.fill = newShape.fill || (isDarkTheme ? '#35352a' : '#d3d3c6');
           newShape.text = newShape.text || '';
           newShape.fontSize = newShape.fontSize || 16;
+          newShape.stroke = newShape.stroke || defaultStroke;
           break;
         case 'markdown':
           newShape.width = newShape.width || 300;
           newShape.height = newShape.height || 200;
-          newShape.fill = '#ffffff';
+          newShape.fill = newShape.fill || defaultFill;
           newShape.text = newShape.text || '';
           newShape.fontSize = newShape.fontSize || 14;
+          newShape.stroke = newShape.stroke || defaultStroke;
           break;
         case 'text':
           newShape.width = newShape.width || 200;
           newShape.height = newShape.height || 50;
           newShape.text = newShape.text || '';
           newShape.fontSize = newShape.fontSize || 16;
+          newShape.fill = newShape.fill || defaultFill;
+          newShape.stroke = newShape.stroke || defaultStroke;
           break;
-        case 'rectangle':
-          newShape.width = newShape.width || 100;
-          newShape.height = newShape.height || 100;
-          break;
-        case 'circle':
-          newShape.radius = newShape.radius || 50;
-          break;
+        // Do not override rectangle, circle, line, arrow, etc.
       }
 
       state.shapes.push(newShape);
+      console.log('[canvasSlice] addShape:', newShape);
+      console.log('[canvasSlice] shapes array after add:', state.shapes);
       
       // Add to history
       state.history = state.history.slice(0, state.historyIndex + 1);

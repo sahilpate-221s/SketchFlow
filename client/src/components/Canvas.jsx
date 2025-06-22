@@ -78,29 +78,25 @@ const Canvas = ({ readOnly = false }) => {
   const cursorTimeoutRef = useRef({});
   const lastCursorUpdateRef = useRef({});
   const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const [stageWidth, setStageWidth] = useState(window.innerWidth);
+  const [stageHeight, setStageHeight] = useState(window.innerHeight);
 
-  // Add stage width and height state with larger initial size
-  const [stageWidth, setStageWidth] = useState(window.innerWidth * 2); // Make workspace larger
-  const [stageHeight, setStageHeight] = useState(window.innerHeight * 2);
-
-  // Update stage size on window resize
+  // Responsive: update stage size to match container
   useEffect(() => {
-    const handleResize = () => {
-      // Keep the workspace larger than the viewport
-      setStageWidth(Math.max(window.innerWidth * 2, stageWidth));
-      setStageHeight(Math.max(window.innerHeight * 2, stageHeight));
+    const updateSize = () => {
+      if (containerRef.current) {
+        setStageWidth(containerRef.current.offsetWidth);
+        setStageHeight(containerRef.current.offsetHeight);
+      } else {
+        setStageWidth(window.innerWidth);
+        setStageHeight(window.innerHeight);
+      }
     };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [stageWidth, stageHeight]);
-
-  // Ensure stage dimensions are never 0
-  useEffect(() => {
-    if (stageWidth === 0 || stageHeight === 0) {
-      setStageWidth(Math.max(window.innerWidth * 2, 1200));
-      setStageHeight(Math.max(window.innerHeight * 2, 800));
-    }
-  }, [stageWidth, stageHeight]);
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
 
   const {
     shapes,
@@ -170,8 +166,8 @@ const Canvas = ({ readOnly = false }) => {
     // Force a re-render if stage dimensions are not set
     if (stageWidth === 0 || stageHeight === 0) {
       const timer = setTimeout(() => {
-        setStageWidth(Math.max(window.innerWidth * 2, 1200));
-        setStageHeight(Math.max(window.innerHeight * 2, 800));
+        setStageWidth(Math.max(window.innerWidth, 1200));
+        setStageHeight(Math.max(window.innerHeight, 800));
       }, 50);
       
       return () => clearTimeout(timer);
@@ -184,11 +180,30 @@ const Canvas = ({ readOnly = false }) => {
 
     joinDiagram(diagramId);
 
+    // Track locally changed shape IDs to avoid overwriting by socket events
+    const localShapeIds = new Set();
+
+    // Helper to add local shape ID and remove after delay
+    const addLocalShapeId = (id) => {
+      localShapeIds.add(id);
+      setTimeout(() => {
+        localShapeIds.delete(id);
+      }, 3000); // 3 seconds buffer to ignore socket updates
+    };
+
     socket.on("shapeUpdate", (data) => {
+      if (localShapeIds.has(data.shape.id)) {
+        // Ignore updates for locally changed shapes
+        return;
+      }
       dispatch(updateShape(data.shape));
     });
 
     socket.on("shapeAdd", (data) => {
+      if (localShapeIds.has(data.shape.id)) {
+        // Ignore adds for locally created shapes
+        return;
+      }
       dispatch(addShape(data.shape));
     });
 
@@ -244,6 +259,17 @@ const Canvas = ({ readOnly = false }) => {
       }, 2000); // Remove cursor after 2 seconds of inactivity
     });
 
+    // Patch dispatch to add local shape IDs on addShape and updateShape
+    const originalDispatch = dispatch;
+    const wrappedDispatch = (action) => {
+      if (action.type === 'canvas/addShape' || action.type === 'canvas/updateShape') {
+        if (action.payload && action.payload.id) {
+          addLocalShapeId(action.payload.id);
+        }
+      }
+      return originalDispatch(action);
+    };
+
     return () => {
       leaveDiagram(diagramId);
       socket.off("shapeUpdate");
@@ -281,7 +307,7 @@ const Canvas = ({ readOnly = false }) => {
       const point = stage.getPointerPosition();
 
       if (isDrawing && currentShape) {
-        console.log("Updating shape during drag:", { tool, currentShape });
+        console.log("Updating shape during drag:", { tool, currentShape, startPoint });
       }
 
       // Throttle cursor updates
@@ -311,7 +337,14 @@ const Canvas = ({ readOnly = false }) => {
         emitViewUpdate(diagramId, stage.scaleX(), stage.position());
         return;
       }
-      if (!isDrawing || !currentShape) return;
+      if (!isDrawing || !currentShape) {
+        console.log("Not drawing or no current shape:", { isDrawing, currentShape });
+        return;
+      }
+      if (!startPoint) {
+        console.log("No start point:", { startPoint });
+        return;
+      }
       const stagePoint = {
         x: (point.x - stage.x()) / stage.scaleX(),
         y: (point.y - stage.y()) / stage.scaleY(),
@@ -323,29 +356,35 @@ const Canvas = ({ readOnly = false }) => {
               x: isDrawing ? stagePoint.x : snapToGrid(stagePoint.x),
               y: isDrawing ? stagePoint.y : snapToGrid(stagePoint.y),
             };
+      console.log("Calculating shape update:", { startPoint, pointToUse, tool });
       let updatedShape;
       switch (tool) {
         case "rectangle": {
+          const width = pointToUse.x - startPoint.x;
+          const height = pointToUse.y - startPoint.y;
           updatedShape = {
             ...currentShape,
             x: startPoint.x,
             y: startPoint.y,
-            width: pointToUse.x - startPoint.x,
-            height: pointToUse.y - startPoint.y,
+            width: Math.abs(width) < 2 ? (width < 0 ? -2 : 2) : width,
+            height: Math.abs(height) < 2 ? (height < 0 ? -2 : 2) : height,
           };
+          console.log("Rectangle update:", updatedShape);
           break;
         }
         case "circle": {
-          const radius = Math.sqrt(
+          let radius = Math.sqrt(
             Math.pow(pointToUse.x - startPoint.x, 2) +
               Math.pow(pointToUse.y - startPoint.y, 2)
           );
+          if (radius < 2) radius = 2;
           updatedShape = {
             ...currentShape,
             x: startPoint.x,
             y: startPoint.y,
             radius,
           };
+          console.log("Circle update:", updatedShape);
           break;
         }
         case "line":
@@ -354,6 +393,7 @@ const Canvas = ({ readOnly = false }) => {
             ...currentShape,
             points: [startPoint.x, startPoint.y, pointToUse.x, pointToUse.y],
           };
+          console.log("Line/Arrow update:", updatedShape);
           break;
         }
         case "freehand": {
@@ -366,12 +406,15 @@ const Canvas = ({ readOnly = false }) => {
             ...currentShape,
             points: smoothed,
           };
+          console.log("Freehand update:", updatedShape);
           break;
         }
         default:
+          console.log("Unknown tool:", tool);
           return;
       }
       if (updatedShape) {
+        console.log("Dispatching shape update:", updatedShape);
         setCurrentShape(updatedShape);
         dispatch(updateShape(updatedShape));
         emitShapeUpdate(diagramId, updatedShape);
@@ -468,6 +511,8 @@ const Canvas = ({ readOnly = false }) => {
         dispatch(setIsDragging(false));
         return;
       }
+      // Dispatch final updateShape to save the last shape state
+      dispatch(updateShape(currentShape));
       setIsDrawing(false);
       setCurrentShape(null);
       setRawFreehandPoints([]); // Reset raw points
@@ -481,20 +526,70 @@ const Canvas = ({ readOnly = false }) => {
 
   // --- Selection and tool switching polish ---
   const handleMouseDown = (e) => {
+    console.log('[Canvas] handleMouseDown fired', { tool, readOnly, target: e.target });
     if (readOnly) return;
-    e.cancelBubble = true;
-    e.evt.preventDefault();
+
+    // Prevent shape creation if markdown panel is open and tool is markdown
+    if (tool === 'markdown' && isMarkdownPanelOpen) {
+      return;
+    }
+
     const stage = e.target.getStage();
     if (!stage) return;
     const point = stage.getPointerPosition();
     if (!point) return;
 
-    // Handle markdown tool
-    if (tool === "markdown") {
-      setIsMarkdownPanelOpen(true);
-      dispatch(setTool("select"));
+    // Handle text tool: create a text shape and open the editor
+    if (tool === 'text') {
+      const newId = uuidv4();
+      const newShape = {
+        id: newId,
+        type: 'text',
+        x: point.x / safeZoom,
+        y: point.y / safeZoom,
+        width: 200,
+        height: 50,
+        text: '',
+        fontSize: 18,
+        fill: '#fff',
+        stroke: '#23232b',
+        strokeWidth: 2,
+        draggable: true,
+      };
+      dispatch(addShape(newShape));
+      setPendingTextId(newId);
+      // Switch back to select tool after placing text
+      dispatch(setTool('select'));
       return;
     }
+
+    // Handle sticky tool: create a sticky note (do not open editor immediately)
+    if (tool === 'sticky') {
+      const newId = uuidv4();
+      const newShape = {
+        id: newId,
+        type: 'sticky',
+        x: point.x / safeZoom,
+        y: point.y / safeZoom,
+        width: 200,
+        height: 150,
+        text: '',
+        fontSize: 16,
+        fill: document.documentElement.classList.contains('dark') ? '#35352a' : '#d3d3c6',
+        stroke: '#6e6e6e',
+        strokeWidth: 2,
+        draggable: true,
+      };
+      dispatch(addShape(newShape));
+      // Switch back to select tool after placing sticky
+      dispatch(setTool('select'));
+      return;
+    }
+
+    e.cancelBubble = true;
+    e.evt.preventDefault();
+
+    console.log("handleMouseDown at point:", point, "tool:", tool);
 
     // Handle eraser tool
     if (tool === "eraser") {
@@ -502,6 +597,7 @@ const Canvas = ({ readOnly = false }) => {
       if (clickedShape !== stage) {
         const shapeId = clickedShape.id();
         if (shapeId) {
+          console.log("Deleting shape with id:", shapeId);
           dispatch(deleteShapes([shapeId]));
           emitShapeDelete(diagramId, [shapeId]);
         }
@@ -549,19 +645,22 @@ const Canvas = ({ readOnly = false }) => {
     if (tool === "freehand") setRawFreehandPoints([pointToUse.x, pointToUse.y]);
 
     // Create new shape based on tool
+    const isDarkTheme = document.documentElement.classList.contains('dark');
+    const defaultFill = isDarkTheme ? '#23272f' : '#b0b3b8';
+    const defaultStroke = '#6e6e6e';
     const newShape = {
       id: uuidv4(),
       type: tool,
       x: pointToUse.x,
       y: pointToUse.y,
       stroke: ["freehand", "line", "arrow"].includes(tool)
-        ? "#fff"
+        ? (strokeColor || defaultStroke)
         : (tool === "text" && (strokeColor.toLowerCase() === "#000000" || strokeColor.toLowerCase() === "#000")
           ? "#fff"
-          : strokeColor),
-      strokeWidth: tool === "freehand" ? 3 : strokeWidth,
+          : (strokeColor || defaultStroke)),
+      strokeWidth: tool === "freehand" ? 3 : (["line", "arrow"].includes(tool) ? 3 : strokeWidth),
       strokeStyle: tool === "freehand" ? "solid" : strokeStyle,
-      fill: tool === "sticky" ? "#4b4b3f" : fillColor,
+      fill: tool === "sticky" ? (isDarkTheme ? '#35352a' : '#d3d3c6') : (fillColor || defaultFill),
       fontSize,
       draggable: !readOnly,
       rotation: 0,
@@ -570,37 +669,37 @@ const Canvas = ({ readOnly = false }) => {
     // Add tool-specific properties with initial minimal size
     switch (tool) {
       case "rectangle":
-        newShape.width = 0;
-        newShape.height = 0;
+        newShape.width = 60; // Minimum visible size
+        newShape.height = 40;
         break;
       case "circle":
-        newShape.radius = 0;
+        newShape.radius = 30; // Minimum visible radius
         break;
       case "line":
       case "arrow":
         newShape.points = [
           pointToUse.x,
           pointToUse.y,
-          pointToUse.x,
-          pointToUse.y,
+          pointToUse.x + 60,
+          pointToUse.y + 1
         ];
         break;
       case "freehand":
         newShape.points = [pointToUse.x, pointToUse.y];
         break;
       case "text":
-        newShape.width = 60;  // Set minimum initial width
-        newShape.height = 24; // Set minimum initial height
+        newShape.width = 120;
+        newShape.height = 40;
         newShape.text = "";
         break;
       case "sticky":
-        newShape.width = 0;
-        newShape.height = 0;
+        newShape.width = 140;
+        newShape.height = 100;
         newShape.text = "Double click to edit...";
         break;
       case "markdown":
-        newShape.width = 0;
-        newShape.height = 0;
+        newShape.width = 300;
+        newShape.height = 200;
         newShape.text = "";
         break;
       default:
@@ -623,14 +722,16 @@ const Canvas = ({ readOnly = false }) => {
         "markdown",
       ].includes(tool)
     ) {
+      console.log("Creating new shape:", newShape);
       setCurrentShape(newShape);
       dispatch(addShape(newShape));
       emitShapeAdd(diagramId, newShape);
+      console.log("Shape created and dispatched");
 
       // Handle text-based tools
       if (tool === "text" || tool === "sticky" || tool === "markdown") {
         // Remove immediate call to handleTextEdit here
-        dispatch(setEditingTextId(newShape.id)); // Set editingTextId to trigger useEffect
+        setEditingTextId(newShape.id); // Set editingTextId to trigger useEffect
         dispatch(setSelectedIds([newShape.id])); // Select the new shape
         dispatch(setTool("select")); // Switch to select tool after creating text shape
       }
@@ -796,21 +897,21 @@ const Canvas = ({ readOnly = false }) => {
 
   // Update handleTextEdit to properly handle sticky notes
   const handleTextEdit = (shapeId, text, position) => {
-    console.log("handleTextEdit called with:", { shapeId, text, position, shapes, editingTextId });
     if (readOnly) return;
     const stage = stageRef.current;
     if (!stage) return;
 
     const shape = shapes.find((s) => s.id === shapeId);
-    if (!shape) {
-      console.log("Shape not found for id:", shapeId);
-      return;
-    }
+    if (!shape) return;
 
     const absPos = stage.container().getBoundingClientRect();
     const scale = stage.scaleX();
 
     setEditingTextValue(text || "");
+    setEditingTextId(null); // Force close if already open
+    setTimeout(() => {
+      setEditingTextId(shapeId); // Re-open editor on every double-click
+    }, 0);
 
     // Calculate position considering stage transform and shape type
     const stagePoint = {
@@ -824,7 +925,6 @@ const Canvas = ({ readOnly = false }) => {
       y: stagePoint.y + absPos.top + (shape.type === "sticky" ? 10 : 0),
     };
 
-    console.log("Setting editingTextPos to:", textPos);
     setEditingTextPos(textPos);
 
     // If it's a sticky note, ensure it has a minimum size
@@ -1226,10 +1326,55 @@ const Canvas = ({ readOnly = false }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [dispatch, readOnly]);
 
+  // Debug shapes array changes
+  useEffect(() => {
+    console.log("Shapes array updated:", shapes);
+  }, [shapes]);
+
+  // Add useEffect to open the markdown panel when the tool is set to 'markdown'
+  useEffect(() => {
+    if (tool === 'markdown') {
+      setIsMarkdownPanelOpen(true);
+    }
+  }, [tool]);
+
+  // Add useEffect to close the markdown panel when clicking outside of it
+  useEffect(() => {
+    if (!isMarkdownPanelOpen) return;
+    const handleClick = (e) => {
+      if (markdownPanelRef.current && !markdownPanelRef.current.contains(e.target)) {
+        setIsMarkdownPanelOpen(false);
+        dispatch(setTool('select'));
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isMarkdownPanelOpen, dispatch]);
+
+  const [pendingTextId, setPendingTextId] = useState(null);
+
+  // Add useEffect to open the text editor only when the new shape is present
+  useEffect(() => {
+    if (!pendingTextId) return;
+    // Support both string and object for backward compatibility
+    const id = typeof pendingTextId === 'string' ? pendingTextId : pendingTextId.id;
+    const absX = typeof pendingTextId === 'object' ? pendingTextId.absX : null;
+    const absY = typeof pendingTextId === 'object' ? pendingTextId.absY : null;
+    const shape = shapes.find(s => s.id === id);
+    if (!shape) return;
+    setEditingTextId(id);
+    setEditingTextValue("");
+    setEditingTextPos(absX !== null && absY !== null
+      ? { x: absX, y: absY }
+      : { x: shape.x * safeZoom, y: shape.y * safeZoom });
+    setPendingTextId(null);
+  }, [pendingTextId, shapes, safeZoom]);
+
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Markdown Notes Panel */}
       <MarkdownNotesPanel
+        ref={markdownPanelRef}
         isOpen={isMarkdownPanelOpen}
         onToggle={() => setIsMarkdownPanelOpen(!isMarkdownPanelOpen)}
         onOpenEditor={openMarkdownEditor}
@@ -1242,6 +1387,7 @@ const Canvas = ({ readOnly = false }) => {
           setIsMarkdownPanelOpen(false);
           setEditingMarkdownId(null);
           setEditingMarkdownValue('');
+          dispatch(setTool('select'));
         }}
         shapes={shapes}
         dispatch={dispatch}
@@ -1321,9 +1467,10 @@ const Canvas = ({ readOnly = false }) => {
 
       {/* Canvas Container - clean, open, no border/box, no overlays */}
       <div
+        ref={containerRef}
         className={`absolute inset-0 transition-all duration-300 ${
           isMarkdownPanelOpen ? "left-[300px]" : "left-0"
-        } bg-gradient-to-br from-black via-neutral-900 to-black pointer-events-auto overflow-hidden`}
+        } bg-gradient-to-br from-black via-neutral-900 to-black pointer-events-auto overflow-hidden w-full h-full min-h-0 min-w-0 flex-1`}
         style={{ zIndex: 10 }}
       >
         {/* Fallback loading state if stage is not ready */}
@@ -1349,12 +1496,14 @@ const Canvas = ({ readOnly = false }) => {
           height={stageHeight}
           scaleX={safeZoom}
           scaleY={safeZoom}
+          x={stageWidth / 4}
+          y={stageHeight / 4}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onWheel={handleWheel}
           draggable={isPanning}
-          className={`bg-transparent ${isMarkdownPanelOpen || isMarkdownEditorOpen ? 'pointer-events-none' : 'pointer-events-auto'}`}
+          className="bg-transparent pointer-events-auto w-full h-full"
         >
           {/* Grid Layer - Infinite grid */}
           <GridLayer
